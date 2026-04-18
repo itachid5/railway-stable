@@ -3,15 +3,22 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TERM=xterm-256color
 ENV COLORTERM=truecolor
-# ঢাকা, বাংলাদেশ টাইমজোন সেট করা হচ্ছে
 ENV TZ="Asia/Dhaka"
+ENV PIP_NO_CACHE_DIR=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV NPM_CONFIG_AUDIT=false
+ENV NPM_CONFIG_FUND=false
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
+ENV NPM_CONFIG_CACHE=/tmp/.npm-cache
 
 # প্রয়োজনীয় প্যাকেজ এবং টাইমজোন (tzdata) সেটআপ
-RUN apt-get update && apt-get install -y \
-    tzdata openssh-server sudo curl wget git nano procps net-tools iputils-ping dnsutils lsof htop jq speedtest-cli unzip tree python3 \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tzdata openssh-server sudo curl wget git nano procps net-tools iputils-ping dnsutils lsof htop jq speedtest-cli unzip tree \
+    python3 python3-pip python3-venv ca-certificates \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && curl -fsSL https://tailscale.com/install.sh | sh \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 # SSH ফোল্ডার তৈরি এবং ইউজার/পাসওয়ার্ড সেটআপ
 RUN mkdir -p /var/run/sshd && \
@@ -55,7 +62,7 @@ alias grep='grep --color=auto'
 alias h='history'
 alias findbig='find . -type f -size +50M -exec ls -lh {} + 2>/dev/null | awk "{ print \$9 \": \" \$5 }"'
 
-# Extra File & Nav Shortcuts
+# 🌟 Extra File & Nav Shortcuts
 alias dsize='du -h --max-depth=1 | sort -hr'
 alias chmodx='chmod +x'
 alias chownme='sudo chown -R $USER:$USER .'
@@ -63,15 +70,16 @@ alias path='echo -e ${PATH//:/\\n}'
 
 # System
 alias up='sudo apt-get update && sudo apt-get upgrade -y'
-alias clean='sudo apt-get autoremove -y && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/* && echo -e "\e[1;32m✔ System Cleaned!\e[0m"'
-alias mem='free -h'
+alias clean='sudo apt-get autoremove -y && sudo apt-get clean'
+alias mem='ram'
+alias hostmem='free -h'
 alias df='df -h'
 alias top='htop'
 alias ports='sudo netstat -tulpn'
 alias logs='sudo tail -f /var/log/syslog'
 alias rst='source ~/.bashrc && echo -e "\e[1;32m✔ Terminal Reloaded!\e[0m"'
 
-# Extra System Shortcuts
+# 🌟 Extra System Shortcuts
 alias sysinfo='cat /etc/os-release'
 alias cpuinfo='lscpu'
 alias myports='ss -tuln'
@@ -83,7 +91,7 @@ alias speed='echo -e "\e[1;33m⌛ Testing Speed...\e[0m"; speedtest-cli --simple
 alias ping='ping -c 4'
 alias ts='sudo tailscale status'
 
-# Extra Network Shortcuts
+# 🌟 Extra Network Shortcuts
 alias pinger='ping -c 4 8.8.8.8'
 alias serve='python3 -m http.server 8000'
 
@@ -95,10 +103,9 @@ alias gp='git push'
 alias gl='git log --oneline --graph -n 10'
 alias get='wget -c'
 alias api='curl -s'
-# আবহাওয়া ঢাকার জন্য সেট করা হয়েছে
 alias weather='curl -s wttr.in/Dhaka?0'
 
-# Python Venv Shortcuts
+# 🌟 Python Venv Shortcuts
 alias mkv='python3 -m venv .venv && echo -e "\e[1;32m✔ .venv created successfully!\e[0m"'
 alias onv='source .venv/bin/activate 2>/dev/null || echo -e "\e[1;31m✘ .venv not found! Run mkv first.\e[0m"'
 alias offv='deactivate 2>/dev/null || echo -e "\e[1;33mℹ No active virtual environment to deactivate.\e[0m"'
@@ -122,7 +129,7 @@ function addcmd() {
     echo -e "\e[90m----------------------------------------\e[0m"
     read -p "Shortcut Name (e.g., gohome) : " S_NAME
     if [ -z "$S_NAME" ]; then echo -e "\e[1;31m✘ Cancelled. Name cannot be empty.\e[0m"; return 1; fi
-    
+
     if grep -q "alias $S_NAME=" "$CUSTOM_ALIAS_FILE" 2>/dev/null; then
         echo -e "\e[1;33mℹ Shortcut '$S_NAME' already exists! Please choose another name.\e[0m"
         return 1
@@ -141,7 +148,7 @@ function delcmd() {
     echo -e "\e[90m----------------------------------------\e[0m"
     read -p "Shortcut Name to delete : " S_NAME
     if [ -z "$S_NAME" ]; then echo -e "\e[1;31m✘ Cancelled. Name cannot be empty.\e[0m"; return 1; fi
-    
+
     if ! grep -q "alias $S_NAME=" "$CUSTOM_ALIAS_FILE" 2>/dev/null; then
         echo -e "\e[1;33mℹ Shortcut '$S_NAME' not found in your custom list!\e[0m"
         return 1
@@ -163,51 +170,78 @@ function pcmd() {
 function cmds() {
     echo -e "\n\e[1;37m⚡ ALL MAGICAL SHORTCUTS ⚡\e[0m"
     echo -e "\e[90m─────────────────────────────────────────────────────────\e[0m"
-    
+
     echo -e "\e[1;33m📁 Navigation & Files\e[0m"
     pcmd "c" "Clear screen"
     pcmd ".." "Go back 1 folder"
-    pcmd "ll" "List files with details"
-    pcmd "sz" "Folder sizes"
-    pcmd "tree" "Visual tree structure"
-    pcmd "findbig" "Find large files"
-    
+    pcmd "..." "Go back 2 folders"
+    pcmd "ll" "List files with details & sizes"
+    pcmd "sz" "Show size of folders/files in current dir"
+    pcmd "md" "Make a new directory (e.g., md newfolder)"
+    pcmd "mkcd <dir>" "Make a directory and instantly enter it 🌟"
+    pcmd "tree" "Show files in a visual tree structure"
+    pcmd "dsize" "List size of all sub-folders cleanly 🌟"
+    pcmd "chownme" "Take ownership of current directory 🌟"
+    pcmd "chmodx" "Make a file executable quickly 🌟"
+    pcmd "ex <file>" "Extract ANY archive (zip, tar, gz, etc.)"
+    pcmd "findbig" "Find files larger than 50MB"
+    pcmd "findtext" "Search inside all files for a specific text 🌟"
+
     echo -e "\n\e[1;33m💻 System & Processes\e[0m"
-    pcmd "up" "Update OS"
-    pcmd "clean" "Aggressive RAM & Cache Cleanup 🌟"
-    pcmd "flush" "Force release inactive RAM caches 🔥"
-    pcmd "mem" "Quick RAM summary"
-    pcmd "ram" "Detailed RAM Usage (Table Style) 🔥"
-    pcmd "df" "Disk space usage"
-    pcmd "top" "Open Task Manager"
-    pcmd "rst" "Reload bash settings"
-    
+    pcmd "up" "Update and upgrade OS packages"
+    pcmd "clean" "Clean system cache and junk files"
+    pcmd "mem" "Same as ram (container-accurate memory view)"
+    pcmd "hostmem" "Raw free -h output from inside container"
+    pcmd "ram" "Container RAM summary + real cause hint"
+    pcmd "ramtop" "Top 15 processes by RSS"
+    pcmd "ramwhy" "Explain what is filling RAM"
+    pcmd "reclaimram" "Clean package caches and try to reclaim RAM"
+    pcmd "df" "Show Disk space usage"
+    pcmd "top" "Open Task Manager (htop)"
+    pcmd "cpuinfo" "Show CPU information 🌟"
+    pcmd "sysinfo" "Show OS version details 🌟"
+    pcmd "ports" "List all currently open ports"
+    pcmd "logs" "View live system logs"
+    pcmd "rst" "Reload terminal settings (bashrc)"
+    pcmd "h" "Show command history"
+    pcmd "histg <txt>" "Search command history for specific text 🌟"
+
     echo -e "\n\e[1;33m🎯 App Management\e[0m"
-    pcmd "apps" "List Node/Python apps"
-    pcmd "kn/kp" "Kill Node/Python apps"
-    pcmd "kport" "Kill app on port"
-    
+    pcmd "apps" "List all running Node/Python apps"
+    pcmd "kn" "Kill all Node.js apps"
+    pcmd "kp" "Kill all Python apps"
+    pcmd "kport <no>" "Kill app running on a specific port"
+
     echo -e "\n\e[1;33m🌐 Network & VPN\e[0m"
-    pcmd "cc/cs" "Connect/Disconnect VPN"
-    pcmd "myip" "Show Public IP"
-    pcmd "speed" "Test Internet speed"
-    
+    pcmd "cc" "Connect to Tailscale VPN"
+    pcmd "cs" "Disconnect & Stop Tailscale VPN"
+    pcmd "ts" "Show Tailscale Status"
+    pcmd "myip" "Show Public IP and full location info"
+    pcmd "pinger" "Quickly check internet connectivity 🌟"
+    pcmd "speed" "Test Internet Download/Upload speed"
+    pcmd "serve" "Instantly host current folder on port 8000 🌟"
+
     echo -e "\n\e[1;33m🛠️ Tools & Dev\e[0m"
-    pcmd "weather" "Weather in Dhaka"
-    pcmd "mkv/onv" "Python Virtual Env tools"
-    pcmd "sv" "Smart Activate Venv"
-    pcmd "dcodex" "Auto-install Node.js & run Codex"
-    pcmd "dpy" "Auto-install Python environment"
-    pcmd "dgo/djava" "Install Go or Java"
-    
-    # Custom Shortcuts Section
+    pcmd "weather" "Show current weather in Dhaka"
+    pcmd "gs, ga, gc" "Git Status, Add, Commit"
+    pcmd "addcmd" "Create a personal custom shortcut!"
+    pcmd "delcmd" "Delete a personal custom shortcut!"
+    pcmd "mkv" "Create new .venv (python3 -m venv) 🌟"
+    pcmd "onv" "Activate .venv (source .venv/bin/...) 🌟"
+    pcmd "offv" "Deactivate current virtual env 🌟"
+    pcmd "sv" "Smart Activate Virtual Env (venv/.venv/env) 🌟"
+    pcmd "dcodex" "Install Node.js + Codex without auto-running it 🌟"
+    pcmd "dpy" "Ensure Python, Pip & Virtualenv are available 🌟"
+    pcmd "dgo" "Auto-install Golang 🌟"
+    pcmd "djava" "Auto-install Java 17 LTS 🌟"
+
     echo -e "\n\e[1;35m👤 My Personal Shortcuts\e[0m"
     if [ -f "$CUSTOM_ALIAS_FILE" ] && [ -s "$CUSTOM_ALIAS_FILE" ]; then
         cat "$CUSTOM_ALIAS_FILE" | sed "s/alias //g" | sed "s/='/|/g" | sed "s/'//g" | while IFS='|' read -r name cmd; do
             pcmd "$name" "$cmd"
         done
     else
-        echo -e "   \e[90mNo personal shortcuts yet.\e[0m"
+        echo -e "   \e[90mNo personal shortcuts yet. Type 'addcmd' to create one.\e[0m"
     fi
     echo -e "\e[90m─────────────────────────────────────────────────────────\e[0m\n"
 }
@@ -235,102 +269,295 @@ function ex() {
 }
 
 # ==========================================
-# 🔥 FORCE RAM FLUSH & CLEANUP (Railway Optimized)
+# 🌟 DEV SHORTCUTS & INSTALLERS
 # ==========================================
-function flush() {
-    echo -e "\e[1;33m⌛ Clearing inactive RAM caches...\e[0m"
-    sync && sudo sysctl -w vm.drop_caches=3 2>/dev/null || true
-    # For containers where sysctl is blocked, we use aggressive temp cleanup
-    sudo rm -rf /tmp/* 2>/dev/null
-    echo -e "\e[1;32m✔ Done! RAM cache released.\e[0m"
-}
 
-# ==========================================
-# 🌟 UPDATED INSTALLERS (WITH AUTO FLUSH)
-# ==========================================
 function sv() {
     if [ -f "venv/bin/activate" ]; then source venv/bin/activate; echo -e "\e[1;32m✔ venv activated!\e[0m";
     elif [ -f ".venv/bin/activate" ]; then source .venv/bin/activate; echo -e "\e[1;32m✔ .venv activated!\e[0m";
     elif [ -f "env/bin/activate" ]; then source env/bin/activate; echo -e "\e[1;32m✔ env activated!\e[0m";
-    else echo -e "\e[1;31m✘ No virtual environment found!\e[0m"; fi
+    else echo -e "\e[1;31m✘ No virtual environment (venv, .venv, env) found in this directory!\e[0m\n\e[1;33mℹ Run 'mkv' to create one.\e[0m"; fi
 }
 
 function dcodex() {
     export NVM_DIR="$HOME/.nvm"
+    export NPM_CONFIG_AUDIT=false
+    export NPM_CONFIG_FUND=false
+    export NPM_CONFIG_UPDATE_NOTIFIER=false
+    export NPM_CONFIG_CACHE=/tmp/.npm-cache
+
     if [ ! -d "$NVM_DIR" ]; then
-        echo -e "\e[1;33m⌛ Installing NVM...\e[0m"
-        sudo apt update && sudo apt install -y curl
+        echo -e "\n\e[1;33m⌛ Installing NVM...\e[0m"
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
     fi
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    
-    if ! command -v node &> /dev/null; then
+
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+    if ! command -v node >/dev/null 2>&1; then
         echo -e "\e[1;33m⌛ Installing Node LTS...\e[0m"
         nvm install --lts
     fi
-    
-    if ! command -v codex &> /dev/null; then
+
+    if ! command -v codex >/dev/null 2>&1; then
         echo -e "\e[1;33m⌛ Installing OpenAI Codex...\e[0m"
-        npm i -g @openai/codex
+        npm i -g @openai/codex --cache /tmp/.npm-cache --prefer-online
+    else
+        echo -e "\e[1;32m✔ Codex already installed.\e[0m"
     fi
-    
-    # Aggressive Cleanup
-    npm cache clean --force 2>/dev/null
-    flush
+
+    npm cache clean --force >/dev/null 2>&1 || true
+    rm -rf /tmp/.npm-cache "$HOME/.npm" "$HOME/.cache/npm" "$HOME/.cache/node-gyp" 2>/dev/null || true
+    sync
+
     echo -e "\e[1;32m✔ Setup Complete!\e[0m"
-    codex
+    echo -e "\e[1;36mNode Version:\e[0m $(node -v)"
+    echo -e "\e[1;36mNPM Version:\e[0m $(npm -v)"
+    echo -e "\e[1;36mCodex Version:\e[0m $(codex --version 2>/dev/null || echo installed)"
+    echo -e "\e[1;33mℹ Codex is installed only. Run 'codex' manually when needed.\e[0m"
 }
 
 function dpy() {
-    echo -e "\e[1;36m🐍 Setting up Python...\e[0m"
-    sudo apt update && sudo apt install -y python3 python3-pip python3-venv
-    sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
-    flush
+    echo -e "\n\e[1;36m🐍 Setting up Python, Pip & Virtualenv...\e[0m"
+
+    NEED_PKGS=""
+    command -v pip3 >/dev/null 2>&1 || NEED_PKGS="$NEED_PKGS python3-pip"
+    python3 -m venv --help >/dev/null 2>&1 || NEED_PKGS="$NEED_PKGS python3-venv"
+
+    if [ -z "$NEED_PKGS" ]; then
+        echo -e "\e[1;32m✔ Python, pip and venv already installed.\e[0m"
+        echo -e "\e[1;36mPython Version:\e[0m $(python3 --version 2>&1)"
+        echo -e "\e[1;36mPip Version:\e[0m $(pip3 --version 2>&1)"
+        return 0
+    fi
+
+    sudo apt-get update
+    sudo apt-get install -y --no-install-recommends $NEED_PKGS
+    sudo apt-get clean
+    sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/cache/apt/*.bin
+    python3 -m pip cache purge >/dev/null 2>&1 || true
+    sync
+
     echo -e "\e[1;32m✔ Python environment is ready!\e[0m"
+    echo -e "\e[1;36mPython Version:\e[0m $(python3 --version 2>&1)"
+    echo -e "\e[1;36mPip Version:\e[0m $(pip3 --version 2>&1)"
 }
 
 function dgo() {
+    echo -e "\n\e[1;36m🐹 Installing Golang...\e[0m"
     sudo apt update && sudo apt install -y golang
-    sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
-    flush
+    sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+    echo -e "\e[1;32m✔ Go installed successfully!\e[0m"
     go version
 }
 
 function djava() {
-    sudo apt update && sudo apt install -y openjdk-17-jdk
-    sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
-    flush
+    echo -e "\n\e[1;36m☕ Installing Java 17 LTS...\e[0m"
+    sudo apt update && sudo apt install -y openjdk-17-jdk openjdk-17-jre
+    sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+    echo -e "\e[1;32m✔ Java installed successfully!\e[0m"
     java -version
 }
 
 # ==========================================
-# 📊 NEW RAM USAGE TABLE (CLEAN & ACCURATE)
+# 📊 RAM / MEMORY TOOLS (CONTAINER ACCURATE)
 # ==========================================
-function ramtop() {
-    echo -e "\n\e[1;36m📊 CONTAINER RAM USAGE BY PROCESS\e[0m"
-    echo -e "\e[90m┌─────────┬──────────┬──────────┬──────────┬──────────────────────┐\e[0m"
-    printf " \e[1;33m│ %-7s │ %-8s │ %-8s │ %-8s │ %-20s │\e[0m\n" "PID" "USER" "RAM %" "USED" "COMMAND"
-    echo -e "\e[90m├─────────┼──────────┼──────────┼──────────┼──────────────────────┤\e[0m"
-    
-    ps -eo pid,user,%mem,rss,comm --sort=-rss | awk 'NR>1 {
-        if($4>1024) { used = int($4/1024) " MB"; }
-        else { used = $4 " KB"; }
-        printf " │ %-7s │ %-8s │ %-8s │ %-8s │ %-20s │\n", $1, substr($2,1,8), $3"%", used, substr($5,1,20)
-    }' | head -n 15
-    
-    echo -e "\e[90m└─────────┴──────────┴──────────┴──────────┴──────────────────────┘\e[0m"
-    echo -e "\e[90mℹ Hint: Type 'flush' to release OS-level caches.\e[0m\n"
+
+_b2h() {
+  awk -v b="${1:-0}" 'BEGIN{
+    split("B KB MB GB TB",u," ");
+    i=1;
+    while (b>=1024 && i<5) { b/=1024; i++ }
+    printf "%.1f %s", b, u[i]
+  }'
 }
-alias ram='ramtop'
+
+_cg_base() {
+  if [ -f /sys/fs/cgroup/memory.current ]; then
+    echo "/sys/fs/cgroup"
+  elif [ -f /sys/fs/cgroup/memory/memory.usage_in_bytes ]; then
+    echo "/sys/fs/cgroup/memory"
+  else
+    echo ""
+  fi
+}
+
+_cg_read() {
+  [ -f "$1" ] && cat "$1" 2>/dev/null || echo 0
+}
+
+_cg_stat() {
+  local key="$1" base="$(_cg_base)"
+  [ -n "$base" ] && awk -v k="$key" '$1==k {print $2}' "$base/memory.stat" 2>/dev/null | head -n 1
+}
+
+function ramtop() {
+  echo -e "\n\e[1;36m📋 Top Processes by RSS\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-7s │ %-8s │ %-6s │ %-10s │ %s\n" "PID" "USER" "MEM%" "USED" "COMMAND"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  ps -eo pid=,user=,%mem=,rss=,comm= --sort=-rss | head -n 15 | while read -r pid user mem rss comm; do
+    used_bytes=$((rss * 1024))
+    used="$(_b2h "$used_bytes")"
+    printf "  %-7s │ %-8.8s │ %-6s │ %-10s │ %s\n" "$pid" "$user" "${mem}%" "$used" "$comm"
+  done
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function ramwhy() {
+  local base used limit anon file shmem slab pgt kstack sock rss codex_proc node_proc py_proc
+  base="$(_cg_base)"
+  [ -z "$base" ] && { echo "cgroup memory info not found"; return 1; }
+
+  if [ -f "$base/memory.current" ]; then
+    used=$(_cg_read "$base/memory.current")
+    limit=$(_cg_read "$base/memory.max")
+  else
+    used=$(_cg_read "$base/memory.usage_in_bytes")
+    limit=$(_cg_read "$base/memory.limit_in_bytes")
+  fi
+
+  anon=${_CG_ANON:-$(_cg_stat anon)}
+  file=${_CG_FILE:-$(_cg_stat file)}
+  shmem=${_CG_SHMEM:-$(_cg_stat shmem)}
+  slab=${_CG_SLAB:-$(_cg_stat slab)}
+  pgt=${_CG_PGT:-$(_cg_stat pagetables)}
+  kstack=${_CG_KSTACK:-$(_cg_stat kernel_stack)}
+  sock=${_CG_SOCK:-$(_cg_stat sock)}
+  rss=$(ps -eo rss= 2>/dev/null | awk '{s+=$1} END {print s*1024}')
+  [ -z "$rss" ] && rss=0
+
+  codex_proc=$(pgrep -af '(^|/)(codex)( |$)|@openai/codex' 2>/dev/null | head -n 3)
+  node_proc=$(ps -eo pid=,rss=,comm=,args= --sort=-rss | grep -E '[n]ode|[n]pm' | head -n 5)
+  py_proc=$(ps -eo pid=,rss=,comm=,args= --sort=-rss | grep -E '[p]ython' | head -n 5)
+
+  echo -e "\n\e[1;35m🔎 RAM Diagnosis\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+
+  if [ "${file:-0}" -gt "${anon:-0}" ] && [ "${file:-0}" -gt $((150*1024*1024)) ]; then
+    echo -e "\e[1;33mMain Cause:\e[0m File/Page cache is dominating memory."
+    echo -e "This usually happens right after apt/npm/pip downloads or package extraction."
+    echo -e "Container memory graphs count this cache too, so graph looks high even when apps are not really using that much RAM."
+  elif [ "${anon:-0}" -gt $((200*1024*1024)) ]; then
+    echo -e "\e[1;33mMain Cause:\e[0m Real process/application memory is high (anon memory)."
+    echo -e "That means one or more running processes are actually holding RAM."
+  else
+    echo -e "\e[1;33mMain Cause:\e[0m Mixed usage."
+    echo -e "Some RAM is real process memory, some is kernel/cache overhead."
+  fi
+
+  if [ -n "$codex_proc" ]; then
+    echo -e "\n\e[1;31m⚠ Codex appears to be running:\e[0m"
+    echo "$codex_proc"
+  fi
+
+  if [ -n "$node_proc" ]; then
+    echo -e "\n\e[1;36mNode/NPM related processes:\e[0m"
+    echo "$node_proc"
+  fi
+
+  if [ -n "$py_proc" ]; then
+    echo -e "\n\e[1;36mPython related processes:\e[0m"
+    echo "$py_proc"
+  fi
+
+  echo -e "\n\e[1;32mWhat to do now:\e[0m"
+  echo -e "  1) Run \e[1;36mram\e[0m and check File Cache vs Anon Memory"
+  echo -e "  2) If File Cache is high, run \e[1;36mreclaimram\e[0m"
+  echo -e "  3) If Anon/Process memory is high, run \e[1;36mramtop\e[0m and stop the heavy process"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function ram() {
+  local base used limit anon file shmem slab pgt kstack sock rss free limit_txt free_txt used_pct
+  base="$(_cg_base)"
+  [ -z "$base" ] && { echo "cgroup memory info not found"; return 1; }
+
+  if [ -f "$base/memory.current" ]; then
+    used=$(_cg_read "$base/memory.current")
+    limit=$(_cg_read "$base/memory.max")
+  else
+    used=$(_cg_read "$base/memory.usage_in_bytes")
+    limit=$(_cg_read "$base/memory.limit_in_bytes")
+  fi
+
+  anon=$(_cg_stat anon); [ -z "$anon" ] && anon=0
+  file=$(_cg_stat file); [ -z "$file" ] && file=0
+  shmem=$(_cg_stat shmem); [ -z "$shmem" ] && shmem=0
+  slab=$(_cg_stat slab); [ -z "$slab" ] && slab=0
+  pgt=$(_cg_stat pagetables); [ -z "$pgt" ] && pgt=0
+  kstack=$(_cg_stat kernel_stack); [ -z "$kstack" ] && kstack=0
+  sock=$(_cg_stat sock); [ -z "$sock" ] && sock=0
+  rss=$(ps -eo rss= 2>/dev/null | awk '{s+=$1} END {print s*1024}')
+  [ -z "$rss" ] && rss=0
+
+  export _CG_ANON="$anon" _CG_FILE="$file" _CG_SHMEM="$shmem" _CG_SLAB="$slab" _CG_PGT="$pgt" _CG_KSTACK="$kstack" _CG_SOCK="$sock"
+
+  if [[ "$limit" =~ ^[0-9]+$ ]] && [ "$limit" -gt 0 ]; then
+    free=$((limit - used))
+    [ "$free" -lt 0 ] && free=0
+    limit_txt="$(_b2h "$limit")"
+    free_txt="$(_b2h "$free")"
+    used_pct=$(awk -v u="$used" -v l="$limit" 'BEGIN { if (l>0) printf "%.1f%%", (u/l)*100; else print "-" }')
+  else
+    limit_txt="unlimited"
+    free_txt="-"
+    used_pct="-"
+  fi
+
+  echo -e "\n\e[1;36m📊 RAM (Container Accurate)\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-20s : %s\n" "Cgroup Total" "$(_b2h "$used")"
+  printf "  %-20s : %s\n" "Memory Limit" "$limit_txt"
+  printf "  %-20s : %s\n" "Free to Limit" "$free_txt"
+  printf "  %-20s : %s\n" "Usage Percent" "$used_pct"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-20s : %s\n" "Process RSS Sum" "$(_b2h "$rss")"
+  printf "  %-20s : %s\n" "Anon Memory" "$(_b2h "$anon")"
+  printf "  %-20s : %s\n" "File Cache" "$(_b2h "$file")"
+  printf "  %-20s : %s\n" "Shared Memory" "$(_b2h "$shmem")"
+  printf "  %-20s : %s\n" "Slab" "$(_b2h "$slab")"
+  printf "  %-20s : %s\n" "Page Tables" "$(_b2h "$pgt")"
+  printf "  %-20s : %s\n" "Kernel Stack" "$(_b2h "$kstack")"
+  printf "  %-20s : %s\n" "Socket Buffers" "$(_b2h "$sock")"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+
+  if [ "$file" -gt "$anon" ] && [ "$file" -gt $((150*1024*1024)) ]; then
+    echo -e "\e[1;33mHint:\e[0m Most RAM is in file/page cache, not in active apps."
+  elif [ "$anon" -gt $((200*1024*1024)) ]; then
+    echo -e "\e[1;33mHint:\e[0m Active processes are the main RAM users right now."
+  else
+    echo -e "\e[1;33mHint:\e[0m RAM usage is mixed between processes and cache."
+  fi
+
+  echo -e "\n\e[1;36mRun these for details:\e[0m  \e[1;32mramtop\e[0m  |  \e[1;32mramwhy\e[0m  |  \e[1;32mreclaimram\e[0m\n"
+}
+
+function reclaimram() {
+  echo -e "\n\e[1;33m🧹 Cleaning package/cache files...\e[0m"
+  npm cache clean --force >/dev/null 2>&1 || true
+  rm -rf /tmp/.npm-cache "$HOME/.npm" "$HOME/.cache/npm" "$HOME/.cache/node-gyp" 2>/dev/null || true
+  sudo apt-get clean >/dev/null 2>&1 || true
+  sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/cache/apt/*.bin 2>/dev/null || true
+  python3 -m pip cache purge >/dev/null 2>&1 || true
+  sync
+
+  if sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null; then
+    echo -e "\e[1;32m✔ Linux page cache dropped.\e[0m"
+  else
+    echo -e "\e[1;33mℹ Cache files removed. Kernel page cache drop is not permitted in this container.\e[0m"
+  fi
+
+  ram
+}
 
 # ==========================================
-# 📊 UI & DASHBOARD FUNCTIONS (REVERTED ACCURACY)
+# 📊 UI & DASHBOARD FUNCTIONS
 # ==========================================
 
 function custom_motd() {
     OS_VERSION=$(grep PRETTY_NAME /etc/os-release | cut -d '"' -f 2); KERNEL_VERSION=$(uname -r); ARCH=$(uname -m)
     CPU_MODEL=$(awk -F': ' '/model name/ {print $2; exit}' /proc/cpuinfo | sed 's/^[ \t]*//'); [ -z "$CPU_MODEL" ] && CPU_MODEL="Unknown Virtual CPU"
-    
+
     LAST_LOGIN_FILE="$HOME/.last_login_info"
     if [ -f "$LAST_LOGIN_FILE" ]; then
         LAST_LOGIN_DATA=$(cat "$LAST_LOGIN_FILE")
@@ -340,10 +567,10 @@ function custom_motd() {
         LAST_LOGIN_TIME="First Login"
         LAST_LOGIN_IP="---"
     fi
-    
+
     CURRENT_IP=$(echo $SSH_CLIENT | awk '{print $1}')
     echo "$(date +"%A, %d %B %Y %I:%M:%S %p")|${CURRENT_IP:-Local}" > "$LAST_LOGIN_FILE"
-    
+
     UPTIME_SEC=$(ps -o etimes= -p 1 2>/dev/null | xargs)
     if [ -n "$UPTIME_SEC" ] && [[ "$UPTIME_SEC" =~ ^[0-9]+$ ]]; then d=$((UPTIME_SEC / 86400)); h=$(( (UPTIME_SEC % 86400) / 3600 )); m=$(( (UPTIME_SEC % 3600) / 60 )); if [ $d -gt 0 ]; then MY_UPTIME="${d} days, ${h} hours, ${m} mins"; elif [ $h -gt 0 ]; then MY_UPTIME="${h} hours, ${m} mins"; else MY_UPTIME="${m} mins"; fi; else MY_UPTIME="Just started"; fi
 
@@ -360,66 +587,67 @@ function custom_motd() {
 }
 
 function mm() {
-    C_C="\e[36m"; C_G="\e[90m"; C_W="\e[1;37m"; C_R="\e[0m"
-    echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Stats Only)${C_R}\n${C_G}------------------------------------------------------------${C_R}"
-    print_row() { echo -e " $1   ${C_W}$(printf "%-5s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-13s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-13s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-14s" "$5")${C_R}"; }
-    
-    # 1. RAM (আপনার পছন্দের সবচেয়ে একুরেট প্রসেস-ভিত্তিক ক্যালকুলেশন)
-    if [ -f /sys/fs/cgroup/memory.max ]; then
-        RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo "max")
-    else
-        RAM_MAX_BYTES="max"
-    fi
+  local base used limit free used_mb limit_mb free_mb used_pct cpu_used cpu_pct disk_used home_usage
+  local C_C="\e[36m" C_G="\e[90m" C_W="\e[1;37m" C_R="\e[0m"
 
-    # লিনাক্সের ফাইল ক্যাশ বাদ দিয়ে শুধুমাত্র প্রসেসগুলো ঠিক কতটুকু RAM নিচ্ছে তার নিখুঁত হিসেব
-    RAM_USED_MB=$(( $(ps -eo rss | awk 'NR>1 {sum+=$1} END {print sum}') / 1024 ))
+  echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Accurate)${C_R}\n${C_G}------------------------------------------------------------${C_R}"
 
-    if [[ "$RAM_MAX_BYTES" =~ ^[0-9]+$ ]]; then
-        RAM_MAX_MB=$((RAM_MAX_BYTES / 1024 / 1024))
-        RAM_FREE_MB=$((RAM_MAX_MB - RAM_USED_MB))
-        [ "$RAM_FREE_MB" -lt 0 ] && RAM_FREE_MB=0
-        R1="${RAM_MAX_MB}MB Max"
-        R2="${RAM_USED_MB}MB Used"
-        R3="${RAM_FREE_MB}MB Free"
-    else
-        R1="953MB Max" # Railway Fallback
-        R2="${RAM_USED_MB}MB Used"
-        R3="$((953 - RAM_USED_MB))MB Free"
-    fi
-    
-    # 2. CPU ( रेलवे की तरह 0.5s विंडो के आधार पर सटीक vCPU उपयोग की गणना)
-    if [ -f /sys/fs/cgroup/cpu.stat ]; then
-        U1=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
-        sleep 0.5
-        U2=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
-        VCPU_USED=$(awk -v u1="$U1" -v u2="$U2" 'BEGIN { val=(u2-u1)/500000; if(val<0) val=0; printf "%.2f", val }')
-    elif [ -f /sys/fs/cgroup/cpuacct/cpuacct.usage ]; then
-        U1=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
-        sleep 0.5
-        U2=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
-        VCPU_USED=$(awk -v u1="$U1" -v u2="$U2" 'BEGIN { val=(u2-u1)/500000000; if(val<0) val=0; printf "%.2f", val }')
-    else
-        VCPU_USED=$(ps -eo %cpu | awk 'NR>1 {sum+=$1} END {printf "%.2f", sum/100}')
-    fi
-    
-    [ -z "$VCPU_USED" ] && VCPU_USED="0.00"
-    
-    C1="2.0 vCPU Max"
-    C2="${VCPU_USED} vCPU"
-    CPU_PCT=$(awk -v v="$VCPU_USED" 'BEGIN { printf "%.1f%%", (v/2)*100 }')
-    C3="(${CPU_PCT} Used)"
+  print_row() {
+    echo -e " $1   ${C_W}$(printf "%-5s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-13s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-13s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-14s" "$5")${C_R}"
+  }
 
-    # 3. DISK
-    D_USED=$(du -sh --exclude=/proc --exclude=/sys --exclude=/dev / 2>/dev/null | awk '{print $1}')
-    [ -z "$D_USED" ] && D_USED="0B"
-    D1="Unlimited"; D2="${D_USED} Used"; D3="Container Only"
-    
-    # 4. FILES (Home Directory size)
-    HOME_USAGE=$(du -sh ~ 2>/dev/null | awk '{print $1}')
-    F1="---"; F2="${HOME_USAGE} Used"; F3="/home/$USER"
-    
-    print_row "❖" "RAM" "$R1" "$R2" "$R3"; print_row "⚙" "CPU" "$C1" "$C2" "$C3"; print_row "⛁" "DISK" "$D1" "$D2" "$D3"; print_row "▣" "FILES" "$F1" "$F2" "$F3"
-    echo -e "${C_G}------------------------------------------------------------${C_R}\n"
+  base="$(_cg_base)"
+  if [ -n "$base" ]; then
+    if [ -f "$base/memory.current" ]; then
+      used=$(_cg_read "$base/memory.current")
+      limit=$(_cg_read "$base/memory.max")
+    else
+      used=$(_cg_read "$base/memory.usage_in_bytes")
+      limit=$(_cg_read "$base/memory.limit_in_bytes")
+    fi
+  else
+    used=0
+    limit="max"
+  fi
+
+  used_mb=$((used / 1024 / 1024))
+  if [[ "$limit" =~ ^[0-9]+$ ]] && [ "$limit" -gt 0 ]; then
+    limit_mb=$((limit / 1024 / 1024))
+    free_mb=$(((limit - used) / 1024 / 1024))
+    [ "$free_mb" -lt 0 ] && free_mb=0
+    used_pct=$(awk -v u="$used" -v l="$limit" 'BEGIN { if (l>0) printf "%.1f%%", (u/l)*100; else print "-" }')
+    print_row "❖" "RAM" "${limit_mb}MB Max" "${used_mb}MB Used" "${free_mb}MB Free"
+  else
+    print_row "❖" "RAM" "Unknown Max" "${used_mb}MB Used" "cgroup mode"
+  fi
+
+  if [ -f /sys/fs/cgroup/cpu.stat ]; then
+    u1=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
+    sleep 0.5
+    u2=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
+    cpu_used=$(awk -v a="$u1" -v b="$u2" 'BEGIN { v=(b-a)/500000; if(v<0) v=0; printf "%.2f", v }')
+  elif [ -f /sys/fs/cgroup/cpuacct/cpuacct.usage ]; then
+    u1=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
+    sleep 0.5
+    u2=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
+    cpu_used=$(awk -v a="$u1" -v b="$u2" 'BEGIN { v=(b-a)/500000000; if(v<0) v=0; printf "%.2f", v }')
+  else
+    cpu_used=$(ps -eo %cpu | awk 'NR>1 {sum+=$1} END {printf "%.2f", sum/100}')
+  fi
+  cpu_pct=$(awk -v v="$cpu_used" 'BEGIN { printf "%.1f%%", (v/2)*100 }')
+  print_row "⚙" "CPU" "2.0 vCPU Max" "${cpu_used} vCPU" "(${cpu_pct} Used)"
+
+  disk_used=$(du -sh --exclude=/proc --exclude=/sys --exclude=/dev / 2>/dev/null | awk '{print $1}')
+  [ -z "$disk_used" ] && disk_used="0B"
+  print_row "⛁" "DISK" "Unlimited" "${disk_used} Used" "Container Only"
+
+  home_usage=$(du -sh ~ 2>/dev/null | awk '{print $1}')
+  [ -z "$home_usage" ] && home_usage="0B"
+  print_row "▣" "FILES" "---" "${home_usage} Used" "/home/$USER"
+
+  echo -e "${C_G}------------------------------------------------------------${C_R}"
+  echo -e " ${C_W}RAM%${C_R} ${C_G}::${C_R}  ${C_C}${used_pct:-unknown}${C_R}"
+  echo -e "${C_G}------------------------------------------------------------${C_R}\n"
 }
 
 # কানেক্ট ফাংশন (cc) এবং (cs)
@@ -438,7 +666,13 @@ function cc() {
     sudo tailscale up --authkey="$TS_KEY" --hostname=phoenix
     if [ $? -eq 0 ]; then echo -e "\n\e[1;32m✔ Success! Phoenix is online.\e[0m\n"; else echo -e "\n\e[1;31m✘ Failed.\e[0m\n"; fi
 }
-function cs() { sudo tailscale logout 2>/dev/null; sudo tailscale down 2>/dev/null; sudo pkill -f tailscaled; echo -e "\e[1;32m✔ Tailscale stopped.\e[0m\n"; }
+
+function cs() {
+    sudo tailscale logout 2>/dev/null
+    sudo tailscale down 2>/dev/null
+    sudo pkill -f tailscaled
+    echo -e "\e[1;32m✔ Tailscale stopped.\e[0m\n"
+}
 
 # --- 🚀 CLEAN LOGIN SCREEN ---
 if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
@@ -447,7 +681,7 @@ if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
     mm
     echo -e "\e[1;33m🔥 Quick Actions:\e[0m"
     printf "   \e[1;32m%-10s\e[0m : %s\n" "cc" "Connect VPN"
-    printf "   \e[1;32m%-10s\e[0m : %s\n" "flush" "Free System RAM 🌟"
+    printf "   \e[1;32m%-10s\e[0m : %s\n" "ram" "Detailed RAM Info"
     printf "   \e[1;36m%-10s\e[0m : \e[1;36m%s\e[0m\n\n" "cmds" "View ALL Shortcuts ⚡"
 fi
 EOF
