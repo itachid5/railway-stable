@@ -337,7 +337,7 @@ function ramtop() {
 alias ram='ramtop'
 
 # ==========================================
-# 📊 UI & DASHBOARD FUNCTIONS (UPDATED FOR CONTAINER)
+# 📊 UI & DASHBOARD FUNCTIONS (UPDATED ACCURACY)
 # ==========================================
 
 function custom_motd() {
@@ -377,14 +377,53 @@ function mm() {
     echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Stats Only)${C_R}\n${C_G}------------------------------------------------------------${C_R}"
     print_row() { echo -e " $1   ${C_W}$(printf "%-5s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-13s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-13s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-14s" "$5")${C_R}"; }
     
-    # 1. RAM (Container Specific)
-    RAM_MAX=$(cat /sys/fs/cgroup/memory.max 2>/dev/null); RAM_USED_KB=$(ps -eo rss | awk 'NR>1 {sum+=$1} END {if(sum=="") sum=0; print sum}'); RAM_USED_MB=$((RAM_USED_KB / 1024))
-    if [[ "$RAM_MAX" =~ ^[0-9]+$ ]]; then RAM_MAX_MB=$((RAM_MAX / 1024 / 1024)); RAM_FREE_MB=$((RAM_MAX_MB - RAM_USED_MB)); R1="${RAM_MAX_MB}MB Max"; R2="${RAM_USED_MB}MB Used"; R3="${RAM_FREE_MB}MB Free"; else R1="Unlimited"; R2="${RAM_USED_MB}MB Used"; R3="Container Only"; fi
+    # 1. RAM (Accurate calculation using cgroups directly like Railway does)
+    if [ -f /sys/fs/cgroup/memory.current ]; then
+        RAM_USED_BYTES=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
+        RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo "max")
+    elif [ -f /sys/fs/cgroup/memory/memory.usage_in_bytes ]; then
+        RAM_USED_BYTES=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || echo 0)
+        RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo "max")
+    fi
+
+    if [[ "$RAM_USED_BYTES" =~ ^[0-9]+$ ]]; then
+        RAM_USED_MB=$((RAM_USED_BYTES / 1024 / 1024))
+    else
+        RAM_USED_MB=$(( $(ps -eo rss | awk 'NR>1 {sum+=$1} END {print sum}') / 1024 ))
+    fi
+
+    if [[ "$RAM_MAX_BYTES" =~ ^[0-9]+$ ]]; then
+        RAM_MAX_MB=$((RAM_MAX_BYTES / 1024 / 1024))
+        RAM_FREE_MB=$((RAM_MAX_MB - RAM_USED_MB))
+        [ "$RAM_FREE_MB" -lt 0 ] && RAM_FREE_MB=0
+        R1="${RAM_MAX_MB}MB Max"
+        R2="${RAM_USED_MB}MB Used"
+        R3="${RAM_FREE_MB}MB Free"
+    else
+        R1="Unlimited"
+        R2="${RAM_USED_MB}MB Used"
+        R3="Container Only"
+    fi
     
-    # 2. CPU (Sum of CPU% from processes running inside this container ONLY)
-    CPU_USED=$(ps -eo %cpu | awk 'NR>1 {sum+=$1} END {printf "%.1f", sum}')
+    # 2. CPU (Calculated over a small time window via cgroups for accurate %)
+    if [ -f /sys/fs/cgroup/cpu.stat ]; then
+        U1=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
+        sleep 0.2
+        U2=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
+        CPU_USED=$(awk -v u1="$U1" -v u2="$U2" 'BEGIN { val=(u2-u1)/2000; if(val<0) val=0; printf "%.1f", val }')
+    elif [ -f /sys/fs/cgroup/cpuacct/cpuacct.usage ]; then
+        U1=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
+        sleep 0.2
+        U2=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
+        CPU_USED=$(awk -v u1="$U1" -v u2="$U2" 'BEGIN { val=(u2-u1)/2000000; if(val<0) val=0; printf "%.1f", val }')
+    else
+        CPU_USED=$(ps -eo %cpu | awk 'NR>1 {sum+=$1} END {printf "%.1f", sum}')
+    fi
     [ -z "$CPU_USED" ] && CPU_USED="0.0"
-    C1="Unlimited"; C2="${CPU_USED}% Used"; C3="Container Only"
+    
+    C1="2.0 vCPU Max"
+    C2="${CPU_USED}% Used"
+    C3="Container Only"
 
     # 3. DISK (Calculating exactly how much disk space files inside the container are using)
     D_USED=$(du -sh --exclude=/proc --exclude=/sys --exclude=/dev / 2>/dev/null | awk '{print $1}')
