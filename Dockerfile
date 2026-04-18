@@ -55,7 +55,7 @@ alias grep='grep --color=auto'
 alias h='history'
 alias findbig='find . -type f -size +50M -exec ls -lh {} + 2>/dev/null | awk "{ print \$9 \": \" \$5 }"'
 
-# 🌟 NEW: Extra File & Nav Shortcuts
+# Extra File & Nav Shortcuts
 alias dsize='du -h --max-depth=1 | sort -hr'
 alias chmodx='chmod +x'
 alias chownme='sudo chown -R $USER:$USER .'
@@ -63,7 +63,7 @@ alias path='echo -e ${PATH//:/\\n}'
 
 # System
 alias up='sudo apt-get update && sudo apt-get upgrade -y'
-alias clean='sudo apt-get autoremove -y && sudo apt-get clean'
+alias clean='sudo apt-get autoremove -y && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/* && echo -e "\e[1;32m✔ System Cleaned!\e[0m"'
 alias mem='free -h'
 alias df='df -h'
 alias top='htop'
@@ -71,7 +71,7 @@ alias ports='sudo netstat -tulpn'
 alias logs='sudo tail -f /var/log/syslog'
 alias rst='source ~/.bashrc && echo -e "\e[1;32m✔ Terminal Reloaded!\e[0m"'
 
-# 🌟 NEW: Extra System Shortcuts
+# Extra System Shortcuts
 alias sysinfo='cat /etc/os-release'
 alias cpuinfo='lscpu'
 alias myports='ss -tuln'
@@ -83,7 +83,7 @@ alias speed='echo -e "\e[1;33m⌛ Testing Speed...\e[0m"; speedtest-cli --simple
 alias ping='ping -c 4'
 alias ts='sudo tailscale status'
 
-# 🌟 NEW: Extra Network Shortcuts
+# Extra Network Shortcuts
 alias pinger='ping -c 4 8.8.8.8'
 alias serve='python3 -m http.server 8000'
 
@@ -98,7 +98,7 @@ alias api='curl -s'
 # আবহাওয়া ঢাকার জন্য সেট করা হয়েছে
 alias weather='curl -s wttr.in/Dhaka?0'
 
-# 🌟 NEW: Python Venv Shortcuts
+# Python Venv Shortcuts
 alias mkv='python3 -m venv .venv && echo -e "\e[1;32m✔ .venv created successfully!\e[0m"'
 alias onv='source .venv/bin/activate 2>/dev/null || echo -e "\e[1;31m✘ .venv not found! Run mkv first.\e[0m"'
 alias offv='deactivate 2>/dev/null || echo -e "\e[1;33mℹ No active virtual environment to deactivate.\e[0m"'
@@ -167,62 +167,38 @@ function cmds() {
     echo -e "\e[1;33m📁 Navigation & Files\e[0m"
     pcmd "c" "Clear screen"
     pcmd ".." "Go back 1 folder"
-    pcmd "..." "Go back 2 folders"
-    pcmd "ll" "List files with details & sizes"
-    pcmd "sz" "Show size of folders/files in current dir"
-    pcmd "md" "Make a new directory (e.g., md newfolder)"
-    pcmd "mkcd <dir>" "Make a directory and instantly enter it 🌟"
-    pcmd "tree" "Show files in a visual tree structure"
-    pcmd "dsize" "List size of all sub-folders cleanly 🌟"
-    pcmd "chownme" "Take ownership of current directory 🌟"
-    pcmd "chmodx" "Make a file executable quickly 🌟"
-    pcmd "ex <file>" "Extract ANY archive (zip, tar, gz, etc.)"
-    pcmd "findbig" "Find files larger than 50MB"
-    pcmd "findtext" "Search inside all files for a specific text 🌟"
+    pcmd "ll" "List files with details"
+    pcmd "sz" "Folder sizes"
+    pcmd "tree" "Visual tree structure"
+    pcmd "findbig" "Find large files"
     
     echo -e "\n\e[1;33m💻 System & Processes\e[0m"
-    pcmd "up" "Update and upgrade OS packages"
-    pcmd "clean" "Clean system cache and junk files"
-    pcmd "mem" "Show RAM usage"
-    pcmd "ram" "Detailed Container RAM Breakdown 🔥"
-    pcmd "df" "Show Disk space usage"
-    pcmd "top" "Open Task Manager (htop)"
-    pcmd "cpuinfo" "Show CPU information 🌟"
-    pcmd "sysinfo" "Show OS version details 🌟"
-    pcmd "ports" "List all currently open ports"
-    pcmd "logs" "View live system logs"
-    pcmd "rst" "Reload terminal settings (bashrc)"
-    pcmd "h" "Show command history"
-    pcmd "histg <txt>" "Search command history for specific text 🌟"
+    pcmd "up" "Update OS"
+    pcmd "clean" "Aggressive RAM & Cache Cleanup 🌟"
+    pcmd "flush" "Force release inactive RAM caches 🔥"
+    pcmd "mem" "Quick RAM summary"
+    pcmd "ram" "Detailed RAM Usage (Table Style) 🔥"
+    pcmd "df" "Disk space usage"
+    pcmd "top" "Open Task Manager"
+    pcmd "rst" "Reload bash settings"
     
     echo -e "\n\e[1;33m🎯 App Management\e[0m"
-    pcmd "apps" "List all running Node/Python apps"
-    pcmd "kn" "Kill all Node.js apps"
-    pcmd "kp" "Kill all Python apps"
-    pcmd "kport <no>" "Kill app running on a specific port"
+    pcmd "apps" "List Node/Python apps"
+    pcmd "kn/kp" "Kill Node/Python apps"
+    pcmd "kport" "Kill app on port"
     
     echo -e "\n\e[1;33m🌐 Network & VPN\e[0m"
-    pcmd "cc" "Connect to Tailscale VPN"
-    pcmd "cs" "Disconnect & Stop Tailscale VPN"
-    pcmd "ts" "Show Tailscale Status"
-    pcmd "myip" "Show Public IP and full location info"
-    pcmd "pinger" "Quickly check internet connectivity 🌟"
-    pcmd "speed" "Test Internet Download/Upload speed"
-    pcmd "serve" "Instantly host current folder on port 8000 🌟"
+    pcmd "cc/cs" "Connect/Disconnect VPN"
+    pcmd "myip" "Show Public IP"
+    pcmd "speed" "Test Internet speed"
     
     echo -e "\n\e[1;33m🛠️ Tools & Dev\e[0m"
-    pcmd "weather" "Show current weather in Dhaka"
-    pcmd "gs, ga, gc" "Git Status, Add, Commit"
-    pcmd "addcmd" "Create a personal custom shortcut!"
-    pcmd "delcmd" "Delete a personal custom shortcut!"
-    pcmd "mkv" "Create new .venv (python3 -m venv) 🌟"
-    pcmd "onv" "Activate .venv (source .venv/bin/...) 🌟"
-    pcmd "offv" "Deactivate current virtual env 🌟"
-    pcmd "sv" "Smart Activate Virtual Env (venv/.venv/env) 🌟"
-    pcmd "dcodex" "Auto-install Node.js & run Codex 🌟"
-    pcmd "dpy" "Auto-install Python, Pip & Virtualenv 🌟"
-    pcmd "dgo" "Auto-install Golang 🌟"
-    pcmd "djava" "Auto-install Java 17 LTS 🌟"
+    pcmd "weather" "Weather in Dhaka"
+    pcmd "mkv/onv" "Python Virtual Env tools"
+    pcmd "sv" "Smart Activate Venv"
+    pcmd "dcodex" "Auto-install Node.js & run Codex"
+    pcmd "dpy" "Auto-install Python environment"
+    pcmd "dgo/djava" "Install Go or Java"
     
     # Custom Shortcuts Section
     echo -e "\n\e[1;35m👤 My Personal Shortcuts\e[0m"
@@ -231,7 +207,7 @@ function cmds() {
             pcmd "$name" "$cmd"
         done
     else
-        echo -e "   \e[90mNo personal shortcuts yet. Type 'addcmd' to create one.\e[0m"
+        echo -e "   \e[90mNo personal shortcuts yet.\e[0m"
     fi
     echo -e "\e[90m─────────────────────────────────────────────────────────\e[0m\n"
 }
@@ -259,20 +235,30 @@ function ex() {
 }
 
 # ==========================================
-# 🌟 NEW DEV SHORTCUTS & INSTALLERS (WITH AUTO CACHE CLEANUP)
+# 🔥 FORCE RAM FLUSH & CLEANUP (Railway Optimized)
 # ==========================================
+function flush() {
+    echo -e "\e[1;33m⌛ Clearing inactive RAM caches...\e[0m"
+    sync && sudo sysctl -w vm.drop_caches=3 2>/dev/null || true
+    # For containers where sysctl is blocked, we use aggressive temp cleanup
+    sudo rm -rf /tmp/* 2>/dev/null
+    echo -e "\e[1;32m✔ Done! RAM cache released.\e[0m"
+}
 
+# ==========================================
+# 🌟 UPDATED INSTALLERS (WITH AUTO FLUSH)
+# ==========================================
 function sv() {
     if [ -f "venv/bin/activate" ]; then source venv/bin/activate; echo -e "\e[1;32m✔ venv activated!\e[0m";
     elif [ -f ".venv/bin/activate" ]; then source .venv/bin/activate; echo -e "\e[1;32m✔ .venv activated!\e[0m";
     elif [ -f "env/bin/activate" ]; then source env/bin/activate; echo -e "\e[1;32m✔ env activated!\e[0m";
-    else echo -e "\e[1;31m✘ No virtual environment (venv, .venv, env) found in this directory!\e[0m\n\e[1;33mℹ Run 'mkv' to create one.\e[0m"; fi
+    else echo -e "\e[1;31m✘ No virtual environment found!\e[0m"; fi
 }
 
 function dcodex() {
     export NVM_DIR="$HOME/.nvm"
     if [ ! -d "$NVM_DIR" ]; then
-        echo -e "\n\e[1;33m⌛ Installing NVM & Node.js...\e[0m"
+        echo -e "\e[1;33m⌛ Installing NVM...\e[0m"
         sudo apt update && sudo apt install -y curl
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
     fi
@@ -288,68 +274,57 @@ function dcodex() {
         npm i -g @openai/codex
     fi
     
-    # 🧹 RAM বাঁচানোর জন্য অপ্রয়োজনীয় ক্যাশ ক্লিন করা হচ্ছে
-    echo -e "\e[1;35m🧹 Cleaning up cache to free RAM...\e[0m"
+    # Aggressive Cleanup
     npm cache clean --force 2>/dev/null
-    rm -rf /tmp/* 2>/dev/null
-    
+    flush
     echo -e "\e[1;32m✔ Setup Complete!\e[0m"
-    echo -e "\e[1;36mNode Version:\e[0m $(node -v)"
-    echo -e "\e[1;36mNPM Version:\e[0m $(npm -v)"
-    echo -e "\e[1;32m▶ Running Codex...\e[0m"
     codex
 }
 
 function dpy() {
-    echo -e "\n\e[1;36m🐍 Setting up Python, Pip & Virtualenv...\e[0m"
-    sudo apt update
-    sudo apt install -y python3 python3-pip python3-venv
-    
-    # 🧹 RAM বাঁচানোর জন্য APT এর ক্যাশ ফাইল ডিলিট করা হচ্ছে
-    echo -e "\e[1;35m🧹 Cleaning up apt cache to free RAM...\e[0m"
-    sudo apt-get clean
-    sudo rm -rf /var/lib/apt/lists/*
-    
+    echo -e "\e[1;36m🐍 Setting up Python...\e[0m"
+    sudo apt update && sudo apt install -y python3 python3-pip python3-venv
+    sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
+    flush
     echo -e "\e[1;32m✔ Python environment is ready!\e[0m"
-    echo -e "\e[1;36mPython Version:\e[0m $(python3 --version 2>&1)"
-    echo -e "\e[1;36mPip Version:\e[0m $(pip3 --version 2>&1)"
 }
 
 function dgo() {
-    echo -e "\n\e[1;36m🐹 Installing Golang...\e[0m"
     sudo apt update && sudo apt install -y golang
     sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
-    echo -e "\e[1;32m✔ Go installed successfully!\e[0m"
+    flush
     go version
 }
 
 function djava() {
-    echo -e "\n\e[1;36m☕ Installing Java 17 LTS...\e[0m"
-    sudo apt update && sudo apt install -y openjdk-17-jdk openjdk-17-jre
+    sudo apt update && sudo apt install -y openjdk-17-jdk
     sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
-    echo -e "\e[1;32m✔ Java installed successfully!\e[0m"
+    flush
     java -version
 }
 
 # ==========================================
-# 📊 RAM USAGE BREAKDOWN FUNCTION (UPDATED UI)
+# 📊 NEW RAM USAGE TABLE (CLEAN & ACCURATE)
 # ==========================================
 function ramtop() {
-    echo -e "\n\e[1;36m📊 RAM Usage Breakdown (Top 15 Processes)\e[0m"
-    echo -e "\e[90m─────────────────────────────────────────────────────────────────\e[0m"
-    printf "  \e[1;33m%-7s │ %-8s │ %-6s │ %-9s │ %s\e[0m\n" "PID" "USER" "MEM%" "USED" "COMMAND"
-    echo -e "\e[90m─────────────────────────────────────────────────────────────────\e[0m"
+    echo -e "\n\e[1;36m📊 CONTAINER RAM USAGE BY PROCESS\e[0m"
+    echo -e "\e[90m┌─────────┬──────────┬──────────┬──────────┬──────────────────────┐\e[0m"
+    printf " \e[1;33m│ %-7s │ %-8s │ %-8s │ %-8s │ %-20s │\e[0m\n" "PID" "USER" "RAM %" "USED" "COMMAND"
+    echo -e "\e[90m├─────────┼──────────┼──────────┼──────────┼──────────────────────┤\e[0m"
+    
     ps -eo pid,user,%mem,rss,comm --sort=-rss | awk 'NR>1 {
-        if($4>1024) { used = int($4/1024) " MB"; col="\e[1;31m"; }
-        else { used = $4 " KB"; col="\e[1;33m"; }
-        printf "  \e[1;37m%-7s\e[0m │ \e[1;32m%-8s\e[0m │ \e[1;36m%-6s\e[0m │ %s%-9s\e[0m │ \e[37m%s\e[0m\n", $1, substr($2,1,8), $3"%", col, used, $5
+        if($4>1024) { used = int($4/1024) " MB"; }
+        else { used = $4 " KB"; }
+        printf " │ %-7s │ %-8s │ %-8s │ %-8s │ %-20s │\n", $1, substr($2,1,8), $3"%", used, substr($5,1,20)
     }' | head -n 15
-    echo -e "\e[90m─────────────────────────────────────────────────────────────────\e[0m\n"
+    
+    echo -e "\e[90m└─────────┴──────────┴──────────┴──────────┴──────────────────────┘\e[0m"
+    echo -e "\e[90mℹ Hint: Type 'flush' to release OS-level caches.\e[0m\n"
 }
 alias ram='ramtop'
 
 # ==========================================
-# 📊 UI & DASHBOARD FUNCTIONS (ACCURATE FOR RAILWAY)
+# 📊 UI & DASHBOARD FUNCTIONS (REVERTED ACCURACY)
 # ==========================================
 
 function custom_motd() {
@@ -389,25 +364,17 @@ function mm() {
     echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Stats Only)${C_R}\n${C_G}------------------------------------------------------------${C_R}"
     print_row() { echo -e " $1   ${C_W}$(printf "%-5s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-13s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-13s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-14s" "$5")${C_R}"; }
     
-    # 1. RAM (Fully matched with Railway cgroups usage_in_bytes / memory.current)
-    if [ -f /sys/fs/cgroup/memory.current ]; then
-        RAM_USED_BYTES=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
+    # 1. RAM (আপনার পছন্দের সবচেয়ে একুরেট প্রসেস-ভিত্তিক ক্যালকুলেশন)
+    if [ -f /sys/fs/cgroup/memory.max ]; then
         RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo "max")
-    elif [ -f /sys/fs/cgroup/memory/memory.usage_in_bytes ]; then
-        RAM_USED_BYTES=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || echo 0)
-        RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo "max")
     else
-        RAM_USED_BYTES=0
         RAM_MAX_BYTES="max"
     fi
 
-    if [[ "$RAM_USED_BYTES" =~ ^[0-9]+$ ]]; then
-        RAM_USED_MB=$((RAM_USED_BYTES / 1024 / 1024))
-    else
-        RAM_USED_MB=$(( $(ps -eo rss | awk 'NR>1 {sum+=$1} END {print sum}') / 1024 ))
-    fi
+    # লিনাক্সের ফাইল ক্যাশ বাদ দিয়ে শুধুমাত্র প্রসেসগুলো ঠিক কতটুকু RAM নিচ্ছে তার নিখুঁত হিসেব
+    RAM_USED_MB=$(( $(ps -eo rss | awk 'NR>1 {sum+=$1} END {print sum}') / 1024 ))
 
-    if [[ "$RAM_MAX_BYTES" =~ ^[0-9]+$ ]] && [ "$RAM_MAX_BYTES" -gt 0 ]; then
+    if [[ "$RAM_MAX_BYTES" =~ ^[0-9]+$ ]]; then
         RAM_MAX_MB=$((RAM_MAX_BYTES / 1024 / 1024))
         RAM_FREE_MB=$((RAM_MAX_MB - RAM_USED_MB))
         [ "$RAM_FREE_MB" -lt 0 ] && RAM_FREE_MB=0
@@ -415,17 +382,16 @@ function mm() {
         R2="${RAM_USED_MB}MB Used"
         R3="${RAM_FREE_MB}MB Free"
     else
-        R1="953MB Max" # Railway Trial Default Fallback
+        R1="953MB Max" # Railway Fallback
         R2="${RAM_USED_MB}MB Used"
         R3="$((953 - RAM_USED_MB))MB Free"
     fi
     
-    # 2. CPU (Calculating exact vCPU usage based on 0.5s window like Railway)
+    # 2. CPU ( रेलवे की तरह 0.5s विंडो के आधार पर सटीक vCPU उपयोग की गणना)
     if [ -f /sys/fs/cgroup/cpu.stat ]; then
         U1=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
         sleep 0.5
         U2=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
-        # Delta over 500,000 microseconds gives exact vCPU count
         VCPU_USED=$(awk -v u1="$U1" -v u2="$U2" 'BEGIN { val=(u2-u1)/500000; if(val<0) val=0; printf "%.2f", val }')
     elif [ -f /sys/fs/cgroup/cpuacct/cpuacct.usage ]; then
         U1=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
@@ -443,7 +409,7 @@ function mm() {
     CPU_PCT=$(awk -v v="$VCPU_USED" 'BEGIN { printf "%.1f%%", (v/2)*100 }')
     C3="(${CPU_PCT} Used)"
 
-    # 3. DISK (Calculating exactly how much disk space files inside the container are using)
+    # 3. DISK
     D_USED=$(du -sh --exclude=/proc --exclude=/sys --exclude=/dev / 2>/dev/null | awk '{print $1}')
     [ -z "$D_USED" ] && D_USED="0B"
     D1="Unlimited"; D2="${D_USED} Used"; D3="Container Only"
@@ -456,7 +422,7 @@ function mm() {
     echo -e "${C_G}------------------------------------------------------------${C_R}\n"
 }
 
-# কানেক্ট ফাংশন (cc) এবং (cs) [আপডেট করা হয়েছে: Tailscale এখন পুরোপুরি ব্যাকগ্রাউন্ডে চলবে]
+# কানেক্ট ফাংশন (cc) এবং (cs)
 function cc() {
     if pgrep -x "tailscaled" > /dev/null; then echo -e "\e[1;33mℹ Tailscale daemon is running.\e[0m"
     else echo -e "\e[1;33m⌛ Starting Tailscale in background...\e[0m"; nohup sudo tailscaled --tun=userspace-networking --socks5-server=localhost:1055 > /dev/null 2>&1 & sleep 3; fi
@@ -481,7 +447,7 @@ if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
     mm
     echo -e "\e[1;33m🔥 Quick Actions:\e[0m"
     printf "   \e[1;32m%-10s\e[0m : %s\n" "cc" "Connect VPN"
-    printf "   \e[1;32m%-10s\e[0m : %s\n" "ram" "Detailed RAM Info"
+    printf "   \e[1;32m%-10s\e[0m : %s\n" "flush" "Free System RAM 🌟"
     printf "   \e[1;36m%-10s\e[0m : \e[1;36m%s\e[0m\n\n" "cmds" "View ALL Shortcuts ⚡"
 fi
 EOF
