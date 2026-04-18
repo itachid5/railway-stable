@@ -319,25 +319,24 @@ function djava() {
 }
 
 # ==========================================
-# 📊 RAM USAGE BREAKDOWN FUNCTION
+# 📊 RAM USAGE BREAKDOWN FUNCTION (UPDATED UI)
 # ==========================================
 function ramtop() {
-    echo -e "\n\e[1;36m📊 RAM Usage Breakdown (Container Processes)\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────\e[0m"
-    printf "  \e[1;33m%-7s %-10s %-7s %-10s %s\e[0m\n" "PID" "USER" "MEM%" "USED" "COMMAND"
+    echo -e "\n\e[1;36m📊 RAM Usage Breakdown (Top 15 Processes)\e[0m"
+    echo -e "\e[90m─────────────────────────────────────────────────────────────────\e[0m"
+    printf "  \e[1;33m%-7s │ %-8s │ %-6s │ %-9s │ %s\e[0m\n" "PID" "USER" "MEM%" "USED" "COMMAND"
+    echo -e "\e[90m─────────────────────────────────────────────────────────────────\e[0m"
     ps -eo pid,user,%mem,rss,comm --sort=-rss | awk 'NR>1 {
-        if($4>1024) {
-            printf "  %-7s %-10s %-7s %-10s %s\n", $1, $2, $3"%", int($4/1024)"MB", $5
-        } else {
-            printf "  %-7s %-10s %-7s %-10s %s\n", $1, $2, $3"%", $4"KB", $5
-        }
+        if($4>1024) { used = int($4/1024) " MB"; col="\e[1;31m"; }
+        else { used = $4 " KB"; col="\e[1;33m"; }
+        printf "  \e[1;37m%-7s\e[0m │ \e[1;32m%-8s\e[0m │ \e[1;36m%-6s\e[0m │ %s%-9s\e[0m │ \e[37m%s\e[0m\n", $1, substr($2,1,8), $3"%", col, used, $5
     }' | head -n 15
-    echo -e "\e[90m────────────────────────────────────────────────────\e[0m\n"
+    echo -e "\e[90m─────────────────────────────────────────────────────────────────\e[0m\n"
 }
 alias ram='ramtop'
 
 # ==========================================
-# 📊 UI & DASHBOARD FUNCTIONS (UPDATED ACCURACY)
+# 📊 UI & DASHBOARD FUNCTIONS (UPDATED ACCURACY FOR RAILWAY)
 # ==========================================
 
 function custom_motd() {
@@ -377,14 +376,20 @@ function mm() {
     echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Stats Only)${C_R}\n${C_G}------------------------------------------------------------${C_R}"
     print_row() { echo -e " $1   ${C_W}$(printf "%-5s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-13s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-13s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-14s" "$5")${C_R}"; }
     
-    # 1. RAM (Accurate calculation using cgroups directly like Railway does)
+    # 1. RAM (Subtracting inactive_file cache exactly like Railway does)
     if [ -f /sys/fs/cgroup/memory.current ]; then
-        RAM_USED_BYTES=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
+        RAM_TOTAL=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
+        INACTIVE_FILE=$(awk '/^inactive_file/ {print $2}' /sys/fs/cgroup/memory.stat 2>/dev/null || echo 0)
+        RAM_USED_BYTES=$((RAM_TOTAL - INACTIVE_FILE))
         RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo "max")
     elif [ -f /sys/fs/cgroup/memory/memory.usage_in_bytes ]; then
-        RAM_USED_BYTES=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || echo 0)
+        RAM_TOTAL=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || echo 0)
+        INACTIVE_FILE=$(awk '/^total_inactive_file/ {print $2}' /sys/fs/cgroup/memory/memory.stat 2>/dev/null || echo 0)
+        RAM_USED_BYTES=$((RAM_TOTAL - INACTIVE_FILE))
         RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo "max")
     fi
+
+    [ "$RAM_USED_BYTES" -lt 0 ] && RAM_USED_BYTES=0
 
     if [[ "$RAM_USED_BYTES" =~ ^[0-9]+$ ]]; then
         RAM_USED_MB=$((RAM_USED_BYTES / 1024 / 1024))
@@ -405,25 +410,28 @@ function mm() {
         R3="Container Only"
     fi
     
-    # 2. CPU (Calculated over a small time window via cgroups for accurate %)
+    # 2. CPU (Calculating exact vCPU usage based on 0.5s window like Railway)
     if [ -f /sys/fs/cgroup/cpu.stat ]; then
         U1=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
-        sleep 0.2
+        sleep 0.5
         U2=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
-        CPU_USED=$(awk -v u1="$U1" -v u2="$U2" 'BEGIN { val=(u2-u1)/2000; if(val<0) val=0; printf "%.1f", val }')
+        # Delta over 500,000 microseconds gives exact vCPU count
+        VCPU_USED=$(awk -v u1="$U1" -v u2="$U2" 'BEGIN { val=(u2-u1)/500000; if(val<0) val=0; printf "%.2f", val }')
     elif [ -f /sys/fs/cgroup/cpuacct/cpuacct.usage ]; then
         U1=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
-        sleep 0.2
+        sleep 0.5
         U2=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
-        CPU_USED=$(awk -v u1="$U1" -v u2="$U2" 'BEGIN { val=(u2-u1)/2000000; if(val<0) val=0; printf "%.1f", val }')
+        VCPU_USED=$(awk -v u1="$U1" -v u2="$U2" 'BEGIN { val=(u2-u1)/500000000; if(val<0) val=0; printf "%.2f", val }')
     else
-        CPU_USED=$(ps -eo %cpu | awk 'NR>1 {sum+=$1} END {printf "%.1f", sum}')
+        VCPU_USED=$(ps -eo %cpu | awk 'NR>1 {sum+=$1} END {printf "%.2f", sum/100}')
     fi
-    [ -z "$CPU_USED" ] && CPU_USED="0.0"
+    
+    [ -z "$VCPU_USED" ] && VCPU_USED="0.00"
     
     C1="2.0 vCPU Max"
-    C2="${CPU_USED}% Used"
-    C3="Container Only"
+    C2="${VCPU_USED} vCPU"
+    CPU_PCT=$(awk -v v="$VCPU_USED" 'BEGIN { printf "%.1f%%", (v/2)*100 }')
+    C3="(${CPU_PCT} Used)"
 
     # 3. DISK (Calculating exactly how much disk space files inside the container are using)
     D_USED=$(du -sh --exclude=/proc --exclude=/sys --exclude=/dev / 2>/dev/null | awk '{print $1}')
