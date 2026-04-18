@@ -259,7 +259,7 @@ function ex() {
 }
 
 # ==========================================
-# 🌟 NEW DEV SHORTCUTS & INSTALLERS
+# 🌟 NEW DEV SHORTCUTS & INSTALLERS (WITH AUTO CACHE CLEANUP)
 # ==========================================
 
 function sv() {
@@ -288,6 +288,11 @@ function dcodex() {
         npm i -g @openai/codex
     fi
     
+    # 🧹 RAM বাঁচানোর জন্য অপ্রয়োজনীয় ক্যাশ ক্লিন করা হচ্ছে
+    echo -e "\e[1;35m🧹 Cleaning up cache to free RAM...\e[0m"
+    npm cache clean --force 2>/dev/null
+    rm -rf /tmp/* 2>/dev/null
+    
     echo -e "\e[1;32m✔ Setup Complete!\e[0m"
     echo -e "\e[1;36mNode Version:\e[0m $(node -v)"
     echo -e "\e[1;36mNPM Version:\e[0m $(npm -v)"
@@ -299,6 +304,12 @@ function dpy() {
     echo -e "\n\e[1;36m🐍 Setting up Python, Pip & Virtualenv...\e[0m"
     sudo apt update
     sudo apt install -y python3 python3-pip python3-venv
+    
+    # 🧹 RAM বাঁচানোর জন্য APT এর ক্যাশ ফাইল ডিলিট করা হচ্ছে
+    echo -e "\e[1;35m🧹 Cleaning up apt cache to free RAM...\e[0m"
+    sudo apt-get clean
+    sudo rm -rf /var/lib/apt/lists/*
+    
     echo -e "\e[1;32m✔ Python environment is ready!\e[0m"
     echo -e "\e[1;36mPython Version:\e[0m $(python3 --version 2>&1)"
     echo -e "\e[1;36mPip Version:\e[0m $(pip3 --version 2>&1)"
@@ -307,6 +318,7 @@ function dpy() {
 function dgo() {
     echo -e "\n\e[1;36m🐹 Installing Golang...\e[0m"
     sudo apt update && sudo apt install -y golang
+    sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
     echo -e "\e[1;32m✔ Go installed successfully!\e[0m"
     go version
 }
@@ -314,6 +326,7 @@ function dgo() {
 function djava() {
     echo -e "\n\e[1;36m☕ Installing Java 17 LTS...\e[0m"
     sudo apt update && sudo apt install -y openjdk-17-jdk openjdk-17-jre
+    sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
     echo -e "\e[1;32m✔ Java installed successfully!\e[0m"
     java -version
 }
@@ -336,7 +349,7 @@ function ramtop() {
 alias ram='ramtop'
 
 # ==========================================
-# 📊 UI & DASHBOARD FUNCTIONS (UPDATED ACCURACY FOR RAILWAY)
+# 📊 UI & DASHBOARD FUNCTIONS (RAM REVERTED + CPU ACCURATE)
 # ==========================================
 
 function custom_motd() {
@@ -376,26 +389,17 @@ function mm() {
     echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Stats Only)${C_R}\n${C_G}------------------------------------------------------------${C_R}"
     print_row() { echo -e " $1   ${C_W}$(printf "%-5s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-13s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-13s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-14s" "$5")${C_R}"; }
     
-    # 1. RAM (Subtracting inactive_file cache exactly like Railway does)
-    if [ -f /sys/fs/cgroup/memory.current ]; then
-        RAM_TOTAL=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
-        INACTIVE_FILE=$(awk '/^inactive_file/ {print $2}' /sys/fs/cgroup/memory.stat 2>/dev/null || echo 0)
-        RAM_USED_BYTES=$((RAM_TOTAL - INACTIVE_FILE))
+    # 1. RAM (আপনার পছন্দের সবচেয়ে একুরেট প্রসেস-ভিত্তিক ক্যালকুলেশনে ফিরিয়ে দেওয়া হয়েছে)
+    if [ -f /sys/fs/cgroup/memory.max ]; then
         RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo "max")
-    elif [ -f /sys/fs/cgroup/memory/memory.usage_in_bytes ]; then
-        RAM_TOTAL=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || echo 0)
-        INACTIVE_FILE=$(awk '/^total_inactive_file/ {print $2}' /sys/fs/cgroup/memory/memory.stat 2>/dev/null || echo 0)
-        RAM_USED_BYTES=$((RAM_TOTAL - INACTIVE_FILE))
+    elif [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
         RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo "max")
-    fi
-
-    [ "$RAM_USED_BYTES" -lt 0 ] && RAM_USED_BYTES=0
-
-    if [[ "$RAM_USED_BYTES" =~ ^[0-9]+$ ]]; then
-        RAM_USED_MB=$((RAM_USED_BYTES / 1024 / 1024))
     else
-        RAM_USED_MB=$(( $(ps -eo rss | awk 'NR>1 {sum+=$1} END {print sum}') / 1024 ))
+        RAM_MAX_BYTES="max"
     fi
+
+    # লিনাক্সের ফাইল ক্যাশ বাদ দিয়ে শুধুমাত্র প্রসেসগুলো ঠিক কতটুকু RAM নিচ্ছে তার নিখুঁত হিসেব
+    RAM_USED_MB=$(( $(ps -eo rss | awk 'NR>1 {sum+=$1} END {print sum}') / 1024 ))
 
     if [[ "$RAM_MAX_BYTES" =~ ^[0-9]+$ ]]; then
         RAM_MAX_MB=$((RAM_MAX_BYTES / 1024 / 1024))
