@@ -349,7 +349,7 @@ function ramtop() {
 alias ram='ramtop'
 
 # ==========================================
-# 📊 UI & DASHBOARD FUNCTIONS (RAM REVERTED + CPU ACCURATE)
+# 📊 UI & DASHBOARD FUNCTIONS (ACCURATE FOR RAILWAY)
 # ==========================================
 
 function custom_motd() {
@@ -389,19 +389,25 @@ function mm() {
     echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Stats Only)${C_R}\n${C_G}------------------------------------------------------------${C_R}"
     print_row() { echo -e " $1   ${C_W}$(printf "%-5s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-13s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-13s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-14s" "$5")${C_R}"; }
     
-    # 1. RAM (আপনার পছন্দের সবচেয়ে একুরেট প্রসেস-ভিত্তিক ক্যালকুলেশনে ফিরিয়ে দেওয়া হয়েছে)
-    if [ -f /sys/fs/cgroup/memory.max ]; then
+    # 1. RAM (Fully matched with Railway cgroups usage_in_bytes / memory.current)
+    if [ -f /sys/fs/cgroup/memory.current ]; then
+        RAM_USED_BYTES=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
         RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo "max")
-    elif [ -f /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+    elif [ -f /sys/fs/cgroup/memory/memory.usage_in_bytes ]; then
+        RAM_USED_BYTES=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || echo 0)
         RAM_MAX_BYTES=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo "max")
     else
+        RAM_USED_BYTES=0
         RAM_MAX_BYTES="max"
     fi
 
-    # লিনাক্সের ফাইল ক্যাশ বাদ দিয়ে শুধুমাত্র প্রসেসগুলো ঠিক কতটুকু RAM নিচ্ছে তার নিখুঁত হিসেব
-    RAM_USED_MB=$(( $(ps -eo rss | awk 'NR>1 {sum+=$1} END {print sum}') / 1024 ))
+    if [[ "$RAM_USED_BYTES" =~ ^[0-9]+$ ]]; then
+        RAM_USED_MB=$((RAM_USED_BYTES / 1024 / 1024))
+    else
+        RAM_USED_MB=$(( $(ps -eo rss | awk 'NR>1 {sum+=$1} END {print sum}') / 1024 ))
+    fi
 
-    if [[ "$RAM_MAX_BYTES" =~ ^[0-9]+$ ]]; then
+    if [[ "$RAM_MAX_BYTES" =~ ^[0-9]+$ ]] && [ "$RAM_MAX_BYTES" -gt 0 ]; then
         RAM_MAX_MB=$((RAM_MAX_BYTES / 1024 / 1024))
         RAM_FREE_MB=$((RAM_MAX_MB - RAM_USED_MB))
         [ "$RAM_FREE_MB" -lt 0 ] && RAM_FREE_MB=0
@@ -409,9 +415,9 @@ function mm() {
         R2="${RAM_USED_MB}MB Used"
         R3="${RAM_FREE_MB}MB Free"
     else
-        R1="Unlimited"
+        R1="953MB Max" # Railway Trial Default Fallback
         R2="${RAM_USED_MB}MB Used"
-        R3="Container Only"
+        R3="$((953 - RAM_USED_MB))MB Free"
     fi
     
     # 2. CPU (Calculating exact vCPU usage based on 0.5s window like Railway)
