@@ -7,13 +7,19 @@ ENV TERM=xterm-256color
 ENV COLORTERM=truecolor
 ENV TZ="Asia/Dhaka"
 
-# Keep package managers quieter and cleaner
+# Cleaner package-manager behavior
 ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV NPM_CONFIG_AUDIT=false
 ENV NPM_CONFIG_FUND=false
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 ENV NPM_CONFIG_CACHE=/tmp/.npm-cache
+
+# Phoenix runtime tuning
+ENV PHOENIX_CPU_SAMPLE_SECONDS=2
+ENV PHOENIX_MM_CPU_SAMPLE_SECONDS=2
+ENV PHOENIX_CPU_FALLBACK_VCPU=
+ENV PHOENIX_CPU_HISTORY_FILE=/tmp/.phoenix_cpu_history
 
 # --------------------------------------------------
 # Base system packages
@@ -90,7 +96,7 @@ alias grep='grep --color=auto'
 alias h='history'
 alias findbig='find . -type f -size +50M -exec ls -lh {} + 2>/dev/null | awk "{ print \$9 \": \" \$5 }"'
 
-# 🌟 Extra File & Nav Shortcuts
+# Extra File & Nav Shortcuts
 alias dsize='du -h --max-depth=1 | sort -hr'
 alias chmodx='chmod +x'
 alias chownme='sudo chown -R $USER:$USER .'
@@ -101,13 +107,15 @@ alias up='sudo apt-get update && sudo apt-get upgrade -y'
 alias clean='sudo apt-get autoremove -y && sudo apt-get clean && reclaimram'
 alias mem='ram'
 alias hostmem='free -h'
+alias cpu='cpuuse'
+alias cpu5='cpuuse 5'
 alias df='df -h'
 alias top='htop'
 alias ports='sudo netstat -tulpn'
 alias logs='sudo tail -f /var/log/syslog'
 alias rst='source ~/.bashrc && echo -e "\e[1;32m✔ Terminal Reloaded!\e[0m"'
 
-# 🌟 Extra System Shortcuts
+# Extra System Shortcuts
 alias sysinfo='cat /etc/os-release'
 alias cpuinfo='lscpu'
 alias myports='ss -tuln'
@@ -119,7 +127,7 @@ alias speed='echo -e "\e[1;33m⌛ Testing Speed...\e[0m"; speedtest-cli --simple
 alias ping='ping -c 4'
 alias ts='sudo tailscale status'
 
-# 🌟 Extra Network Shortcuts
+# Extra Network Shortcuts
 alias pinger='ping -c 4 8.8.8.8'
 alias serve='python3 -m http.server 8000'
 
@@ -133,13 +141,13 @@ alias get='wget -c'
 alias api='curl -s'
 alias weather='curl -s wttr.in/Dhaka?0'
 
-# 🌟 Python Venv Shortcuts
+# Python Venv Shortcuts
 alias mkv='python3 -m venv .venv && echo -e "\e[1;32m✔ .venv created successfully!\e[0m"'
 alias onv='source .venv/bin/activate 2>/dev/null || echo -e "\e[1;31m✘ .venv not found! Run mkv first.\e[0m"'
 alias offv='deactivate 2>/dev/null || echo -e "\e[1;33mℹ No active virtual environment to deactivate.\e[0m"'
 
 # Apps Management
-alias apps='echo -e "\n\e[1;36m▶ Node/Python/Codex Apps:\e[0m"; ps -eo pid,user,%cpu,%mem,command | grep -E "[c]odex|[n]ode|[p]ython" || echo -e "\e[90mNone\e[0m"'
+alias apps='echo -e "\n\e[1;36m▶ Codex / Node / Python Apps:\e[0m"; ps -eo pid,user,%cpu,%mem,command | grep -E "[c]odex|[n]ode|[p]ython" || echo -e "\e[90mNone\e[0m"'
 alias kn='sudo pkill -f node 2>/dev/null; echo -e "\e[1;32m✔ All Node apps stopped.\e[0m"'
 alias kp='sudo pkill -f python 2>/dev/null; echo -e "\e[1;32m✔ All Python apps stopped.\e[0m"'
 alias kcodex='sudo pkill -f codex 2>/dev/null; echo -e "\e[1;32m✔ All Codex processes stopped.\e[0m"'
@@ -189,82 +197,90 @@ function delcmd() {
 }
 
 # ==========================================
-# ⚡ THE PERFECTLY ALIGNED COMMAND MENU
+# ⚡ MENU
 # ==========================================
 
 function pcmd() {
-    printf "   \e[1;32m%-12s\e[0m : %s\n" "$1" "$2"
+    printf "   \e[1;32m%-14s\e[0m : %s\n" "$1" "$2"
 }
 
 function cmds() {
     echo -e "\n\e[1;37m⚡ ALL MAGICAL SHORTCUTS ⚡\e[0m"
-    echo -e "\e[90m─────────────────────────────────────────────────────────\e[0m"
+    echo -e "\e[90m──────────────────────────────────────────────────────────────\e[0m"
 
     echo -e "\e[1;33m📁 Navigation & Files\e[0m"
     pcmd "c" "Clear screen"
     pcmd ".." "Go back 1 folder"
     pcmd "..." "Go back 2 folders"
     pcmd "ll" "List files with details & sizes"
-    pcmd "sz" "Show size of folders/files in current dir"
-    pcmd "md" "Make a new directory (e.g., md newfolder)"
-    pcmd "mkcd <dir>" "Make a directory and instantly enter it 🌟"
-    pcmd "tree" "Show files in a visual tree structure"
-    pcmd "dsize" "List size of all sub-folders cleanly 🌟"
-    pcmd "chownme" "Take ownership of current directory 🌟"
-    pcmd "chmodx" "Make a file executable quickly 🌟"
-    pcmd "ex <file>" "Extract ANY archive (zip, tar, gz, etc.)"
+    pcmd "sz" "Show size of files/folders here"
+    pcmd "md" "Make a new directory"
+    pcmd "mkcd <dir>" "Make a directory and enter it"
+    pcmd "tree" "Visual tree structure"
+    pcmd "dsize" "Sub-folder sizes"
+    pcmd "chownme" "Take ownership of current directory"
+    pcmd "chmodx" "Make a file executable"
+    pcmd "ex <file>" "Extract archive"
     pcmd "findbig" "Find files larger than 50MB"
-    pcmd "findtext" "Search inside all files for a specific text 🌟"
+    pcmd "findtext" "Search text inside files"
 
     echo -e "\n\e[1;33m💻 System & Processes\e[0m"
-    pcmd "up" "Update and upgrade OS packages"
+    pcmd "up" "Update and upgrade packages"
     pcmd "clean" "Autoremove + apt clean + reclaimram"
-    pcmd "mem" "Same as ram (container-accurate memory view)"
-    pcmd "hostmem" "Raw free -h output from inside container"
-    pcmd "ram" "Container RAM summary + root-cause hint"
-    pcmd "ramtop" "Top 15 processes by RSS"
-    pcmd "ramwhy" "Explain what is filling RAM"
-    pcmd "reclaimram" "Clean package caches and try to reclaim RAM"
-    pcmd "cachefiles" "Show common cache directories"
-    pcmd "df" "Show Disk space usage"
-    pcmd "top" "Open Task Manager (htop)"
-    pcmd "cpuinfo" "Show CPU information 🌟"
-    pcmd "sysinfo" "Show OS version details 🌟"
-    pcmd "ports" "List all currently open ports"
-    pcmd "logs" "View live system logs"
-    pcmd "rst" "Reload terminal settings (bashrc)"
-    pcmd "h" "Show command history"
-    pcmd "histg <txt>" "Search command history for specific text 🌟"
+    pcmd "mem" "Same as ram"
+    pcmd "hostmem" "Raw free -h"
+    pcmd "ram" "Container RAM summary"
+    pcmd "ramtop" "Top processes by RSS"
+    pcmd "ramwhy" "Explain RAM usage"
+    pcmd "cachefiles" "Show cache directories"
+    pcmd "reclaimram" "Clean cache files"
+    pcmd "cpu" "CPU usage (2s avg)"
+    pcmd "cpu5" "CPU usage (5s avg)"
+    pcmd "cputop" "Top CPU-hungry processes"
+    pcmd "cpulive [s]" "Live CPU monitor"
+    pcmd "cpuwhy [s]" "Explain CPU spikes / throttling"
+    pcmd "cpuavg [s]" "Average saved CPU history"
+    pcmd "cginfo" "Show raw cgroup info"
+    pcmd "diag" "Quick full diagnostics"
+    pcmd "df" "Disk space usage"
+    pcmd "top" "Task manager"
+    pcmd "cpuinfo" "CPU hardware info"
+    pcmd "sysinfo" "OS details"
+    pcmd "ports" "Open ports"
+    pcmd "logs" "Live syslog"
+    pcmd "rst" "Reload terminal settings"
+    pcmd "h" "History"
+    pcmd "histg <txt>" "Search history"
 
     echo -e "\n\e[1;33m🎯 App Management\e[0m"
-    pcmd "apps" "List all running Codex/Node/Python apps"
+    pcmd "apps" "List Codex/Node/Python apps"
     pcmd "kn" "Kill all Node.js apps"
     pcmd "kp" "Kill all Python apps"
     pcmd "kcodex" "Kill all Codex processes"
-    pcmd "kport <no>" "Kill app running on a specific port"
+    pcmd "kport <no>" "Kill app on a port"
 
     echo -e "\n\e[1;33m🌐 Network & VPN\e[0m"
-    pcmd "cc" "Connect to Tailscale VPN"
-    pcmd "cs" "Disconnect & Stop Tailscale VPN"
-    pcmd "ts" "Show Tailscale Status"
-    pcmd "myip" "Show Public IP and full location info"
-    pcmd "pinger" "Quickly check internet connectivity 🌟"
-    pcmd "speed" "Test Internet Download/Upload speed"
-    pcmd "serve" "Instantly host current folder on port 8000 🌟"
+    pcmd "cc" "Connect to Tailscale"
+    pcmd "cs" "Disconnect Tailscale"
+    pcmd "ts" "Tailscale status"
+    pcmd "myip" "Public IP details"
+    pcmd "pinger" "Internet connectivity test"
+    pcmd "speed" "Internet speed test"
+    pcmd "serve" "Host current folder on :8000"
 
     echo -e "\n\e[1;33m🛠️ Tools & Dev\e[0m"
-    pcmd "weather" "Show current weather in Dhaka"
-    pcmd "gs, ga, gc" "Git Status, Add, Commit"
-    pcmd "addcmd" "Create a personal custom shortcut!"
-    pcmd "delcmd" "Delete a personal custom shortcut!"
-    pcmd "mkv" "Create new .venv (python3 -m venv) 🌟"
-    pcmd "onv" "Activate .venv (source .venv/bin/...) 🌟"
-    pcmd "offv" "Deactivate current virtual env 🌟"
-    pcmd "sv" "Smart Activate Virtual Env (venv/.venv/env) 🌟"
-    pcmd "dcodex" "Codex is preinstalled; show version/status 🌟"
-    pcmd "dpy" "Check Python, Pip & Virtualenv status 🌟"
-    pcmd "dgo" "Auto-install Golang (runtime, may raise cache) 🌟"
-    pcmd "djava" "Auto-install Java 17 LTS (runtime, may raise cache) 🌟"
+    pcmd "weather" "Weather in Dhaka"
+    pcmd "gs, ga, gc" "Git shortcuts"
+    pcmd "addcmd" "Create personal shortcut"
+    pcmd "delcmd" "Delete personal shortcut"
+    pcmd "mkv" "Create .venv"
+    pcmd "onv" "Activate .venv"
+    pcmd "offv" "Deactivate venv"
+    pcmd "sv" "Smart activate venv"
+    pcmd "dcodex" "Show Codex status"
+    pcmd "dpy" "Check Python/Pip/Venv"
+    pcmd "dgo" "Install Golang at runtime"
+    pcmd "djava" "Install Java 17 at runtime"
 
     echo -e "\n\e[1;35m👤 My Personal Shortcuts\e[0m"
     if [ -f "$CUSTOM_ALIAS_FILE" ] && [ -s "$CUSTOM_ALIAS_FILE" ]; then
@@ -274,7 +290,8 @@ function cmds() {
     else
         echo -e "   \e[90mNo personal shortcuts yet. Type 'addcmd' to create one.\e[0m"
     fi
-    echo -e "\e[90m─────────────────────────────────────────────────────────\e[0m\n"
+
+    echo -e "\e[90m──────────────────────────────────────────────────────────────\e[0m\n"
 }
 
 # ==========================================
@@ -285,7 +302,10 @@ function mkcd() { mkdir -p "$1" && cd "$1"; }
 function findtext() { grep -rnw . -e "$1"; }
 
 function kport() {
-    if [ -z "$1" ]; then echo -e "\e[1;31m✘ Usage: kport <port>\e[0m"; return 1; fi
+    if [ -z "$1" ]; then
+        echo -e "\e[1;31m✘ Usage: kport <port>\e[0m"
+        return 1
+    fi
     PID=$(sudo lsof -t -i:$1)
     if [ -z "$PID" ]; then
         echo -e "\e[1;33mℹ Port $1 is free\e[0m"
@@ -296,8 +316,11 @@ function kport() {
 }
 
 function ex() {
-    if [ -z "$1" ]; then echo -e "\e[1;31m✘ Usage: ex <filename>\e[0m"; return 1; fi
-    if [ -f "$1" ] ; then
+    if [ -z "$1" ]; then
+        echo -e "\e[1;31m✘ Usage: ex <filename>\e[0m"
+        return 1
+    fi
+    if [ -f "$1" ]; then
         case "$1" in
             *.tar.bz2) tar xjf "$1" ;;
             *.tar.gz) tar xzf "$1" ;;
@@ -314,7 +337,7 @@ function ex() {
 }
 
 # ==========================================
-# 🌟 DEV SHORTCUTS
+# DEV SHORTCUTS
 # ==========================================
 
 function sv() {
@@ -333,7 +356,6 @@ function sv() {
     fi
 }
 
-# Codex is already baked into the image
 function dcodex() {
     echo -e "\n\e[1;36m🤖 Codex Status\e[0m"
     echo -e "\e[90m----------------------------------------\e[0m"
@@ -399,7 +421,7 @@ function djava() {
 }
 
 # ==========================================
-# 📊 RAM / MEMORY TOOLS (CONTAINER ACCURATE)
+# MEMORY / RAM HELPERS
 # ==========================================
 
 _b2h() {
@@ -411,7 +433,7 @@ _b2h() {
   }'
 }
 
-_cg_mode() {
+_mem_mode() {
   if [ -f /sys/fs/cgroup/memory.current ]; then
     echo "v2"
   elif [ -f /sys/fs/cgroup/memory/memory.usage_in_bytes ]; then
@@ -436,7 +458,7 @@ _cg_read() {
 }
 
 _cg_stat() {
-  local key="$1" base="$(_cg_base)" mode="$(_cg_mode)" alt=""
+  local key="$1" base="$(_cg_base)" mode="$(_mem_mode)" alt=""
   [ -z "$base" ] && { echo 0; return; }
 
   if [ "$mode" = "v2" ]; then
@@ -459,6 +481,159 @@ _cg_stat() {
   awk -v k="$alt" '$1==k {print $2}' "$base/memory.stat" 2>/dev/null | head -n 1
 }
 
+# ==========================================
+# CPU HELPERS
+# ==========================================
+
+_cpu_mode() {
+  if [ -f /sys/fs/cgroup/cpu.stat ]; then
+    echo "v2"
+  elif [ -f /sys/fs/cgroup/cpuacct/cpuacct.usage ] || [ -f /sys/fs/cgroup/cpu/cpu.stat ]; then
+    echo "v1"
+  else
+    echo ""
+  fi
+}
+
+_cpu_limit() {
+  local quota period
+  if [ -f /sys/fs/cgroup/cpu.max ]; then
+    read -r quota period < /sys/fs/cgroup/cpu.max
+    if [ "$quota" != "max" ] && [ -n "$period" ] && [ "$period" -gt 0 ] 2>/dev/null; then
+      awk -v q="$quota" -v p="$period" 'BEGIN { printf "%.2f\n", q/p }'
+      return
+    fi
+  fi
+
+  if [ -f /sys/fs/cgroup/cpu/cpu.cfs_quota_us ] && [ -f /sys/fs/cgroup/cpu/cpu.cfs_period_us ]; then
+    quota=$(cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us 2>/dev/null)
+    period=$(cat /sys/fs/cgroup/cpu/cpu.cfs_period_us 2>/dev/null)
+    if [ -n "$quota" ] && [ "$quota" -gt 0 ] 2>/dev/null && [ -n "$period" ] && [ "$period" -gt 0 ] 2>/dev/null; then
+      awk -v q="$quota" -v p="$period" 'BEGIN { printf "%.2f\n", q/p }'
+      return
+    fi
+  fi
+
+  if [ -n "$PHOENIX_CPU_FALLBACK_VCPU" ] && awk -v v="$PHOENIX_CPU_FALLBACK_VCPU" 'BEGIN { exit !(v>0) }'; then
+    printf "%.2f\n" "$PHOENIX_CPU_FALLBACK_VCPU"
+    return
+  fi
+
+  echo "0"
+}
+
+_cpu_limit_label() {
+  local l="$(_cpu_limit)"
+  if awk -v v="$l" 'BEGIN { exit !(v>0) }'; then
+    printf "%s vCPU limit" "$l"
+  else
+    printf "shared/auto"
+  fi
+}
+
+_cpu_usage_usec() {
+  if [ -f /sys/fs/cgroup/cpu.stat ]; then
+    awk '/^usage_usec / {print $2; exit}' /sys/fs/cgroup/cpu.stat 2>/dev/null
+    return
+  fi
+  if [ -f /sys/fs/cgroup/cpuacct/cpuacct.usage ]; then
+    awk '{printf "%.0f\n", $1/1000}' /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null
+    return
+  fi
+  echo 0
+}
+
+_cpu_throttled_usec() {
+  if [ -f /sys/fs/cgroup/cpu.stat ]; then
+    awk '/^throttled_usec / {print $2; found=1} END {if(!found) print 0}' /sys/fs/cgroup/cpu.stat 2>/dev/null
+    return
+  fi
+  if [ -f /sys/fs/cgroup/cpu/cpu.stat ]; then
+    awk '/^throttled_time / {printf "%.0f\n", $2/1000; found=1} END {if(!found) print 0}' /sys/fs/cgroup/cpu/cpu.stat 2>/dev/null
+    return
+  fi
+  echo 0
+}
+
+_cpu_nr_throttled() {
+  if [ -f /sys/fs/cgroup/cpu.stat ]; then
+    awk '/^nr_throttled / {print $2; found=1} END {if(!found) print 0}' /sys/fs/cgroup/cpu.stat 2>/dev/null
+    return
+  fi
+  if [ -f /sys/fs/cgroup/cpu/cpu.stat ]; then
+    awk '/^nr_throttled / {print $2; found=1} END {if(!found) print 0}' /sys/fs/cgroup/cpu/cpu.stat 2>/dev/null
+    return
+  fi
+  echo 0
+}
+
+_cpu_nr_periods() {
+  if [ -f /sys/fs/cgroup/cpu.stat ]; then
+    awk '/^nr_periods / {print $2; found=1} END {if(!found) print 0}' /sys/fs/cgroup/cpu.stat 2>/dev/null
+    return
+  fi
+  if [ -f /sys/fs/cgroup/cpu/cpu.stat ]; then
+    awk '/^nr_periods / {print $2; found=1} END {if(!found) print 0}' /sys/fs/cgroup/cpu/cpu.stat 2>/dev/null
+    return
+  fi
+  echo 0
+}
+
+_cpu_pressure_avg() {
+  local kind="${1:-some}" window="avg${2:-10}"
+  [ ! -f /sys/fs/cgroup/cpu.pressure ] && { echo "0.00"; return; }
+  awk -v k="$kind" -v w="$window" '$1==k { for(i=2;i<=NF;i++){ split($i,a,"="); if(a[1]==w){ print a[2]; found=1; exit } } } END { if(!found) print "0.00" }' /sys/fs/cgroup/cpu.pressure 2>/dev/null
+}
+
+_cpu_history_file() {
+  echo "${PHOENIX_CPU_HISTORY_FILE:-/tmp/.phoenix_cpu_history}"
+}
+
+_cpu_record_history() {
+  local used="$1" limit="$2" pct="$3" file tmp
+  file="$(_cpu_history_file)"
+  tmp="${file}.tmp"
+  printf '%s|%s|%s|%s\n' "$(date +%s)" "$used" "$limit" "$pct" >> "$file"
+  tail -n 120 "$file" > "$tmp" 2>/dev/null && mv "$tmp" "$file"
+}
+
+_cpu_avg_history() {
+  local window="${1:-30}" file now
+  file="$(_cpu_history_file)"
+  [ ! -f "$file" ] && return 1
+  now=$(date +%s)
+  awk -F'|' -v cutoff="$((now - window))" '$1>=cutoff {sum+=$2; n++} END { if(n>0) printf "%.3f\n", sum/n; else exit 1 }' "$file"
+}
+
+_cpu_measure() {
+  local secs="${1:-2}" u1 u2 t1 t2 wall thr1 thr2 n1 n2 used limit pct thr_pct psi_some psi_full
+  u1=$(_cpu_usage_usec)
+  thr1=$(_cpu_throttled_usec)
+  n1=$(_cpu_nr_throttled)
+  t1=$(date +%s%N)
+  sleep "$secs"
+  t2=$(date +%s%N)
+  u2=$(_cpu_usage_usec)
+  thr2=$(_cpu_throttled_usec)
+  n2=$(_cpu_nr_throttled)
+  wall=$(( (t2 - t1) / 1000 ))
+  [ "$wall" -le 0 ] && wall=1
+
+  used=$(awk -v du="$((u2-u1))" -v dw="$wall" 'BEGIN{ v=du/dw; if(v<0) v=0; printf "%.3f", v }')
+  limit=$(_cpu_limit)
+  pct=$(awk -v u="$used" -v l="$limit" 'BEGIN{ if(l>0) printf "%.1f", (u/l)*100; else print "-" }')
+  thr_pct=$(awk -v dt="$((thr2-thr1))" -v dw="$wall" 'BEGIN{ if(dw>0){ p=(dt/dw)*100; if(p<0)p=0; printf "%.1f", p } else print "0.0" }')
+  psi_some=$(_cpu_pressure_avg some 10)
+  psi_full=$(_cpu_pressure_avg full 10)
+
+  _cpu_record_history "$used" "$limit" "$pct"
+  echo "$used|$limit|$pct|$((thr2-thr1))|$thr_pct|$((n2-n1))|$psi_some|$psi_full|$secs"
+}
+
+# ==========================================
+# RAM TOOLS
+# ==========================================
+
 function ramtop() {
   echo -e "\n\e[1;36m📋 Top Processes by RSS\e[0m"
   echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
@@ -473,7 +648,7 @@ function ramtop() {
 }
 
 function ramwhy() {
-  local base used limit anon file shmem slab slab_reclaimable pgt kstack sock rss codex_proc node_proc py_proc reclaimable
+  local base used limit anon file shmem slab pgt kstack sock rss codex_proc node_proc py_proc
   base="$(_cg_base)"
   [ -z "$base" ] && { echo "cgroup memory info not found"; return 1; }
 
@@ -489,13 +664,11 @@ function ramwhy() {
   file=${_CG_FILE:-$(_cg_stat file)}; [ -z "$file" ] && file=0
   shmem=${_CG_SHMEM:-$(_cg_stat shmem)}; [ -z "$shmem" ] && shmem=0
   slab=${_CG_SLAB:-$(_cg_stat slab)}; [ -z "$slab" ] && slab=0
-  slab_reclaimable=${_CG_SLAB_REC:-$(_cg_stat slab_reclaimable)}; [ -z "$slab_reclaimable" ] && slab_reclaimable=0
   pgt=${_CG_PGT:-$(_cg_stat pagetables)}; [ -z "$pgt" ] && pgt=0
   kstack=${_CG_KSTACK:-$(_cg_stat kernel_stack)}; [ -z "$kstack" ] && kstack=0
   sock=${_CG_SOCK:-$(_cg_stat sock)}; [ -z "$sock" ] && sock=0
   rss=$(ps -eo rss= 2>/dev/null | awk '{s+=$1} END {print s*1024}')
   [ -z "$rss" ] && rss=0
-  reclaimable=$((file + slab_reclaimable))
 
   codex_proc=$(pgrep -af '(^|/)(codex)( |$)|@openai/codex' 2>/dev/null | head -n 3)
   node_proc=$(ps -eo pid=,rss=,comm=,args= --sort=-rss | grep -E '[n]ode|[n]pm' | head -n 5)
@@ -506,8 +679,7 @@ function ramwhy() {
 
   if [ "$file" -gt "$anon" ] && [ "$file" -gt $((150*1024*1024)) ]; then
     echo -e "\e[1;33mMain Cause:\e[0m File/Page cache is dominating memory."
-    echo -e "This usually happens after installs, archive extraction, or heavy file scanning."
-    echo -e "Likely reclaimable cache now: \e[1;36m$(_b2h "$reclaimable")\e[0m"
+    echo -e "This usually happens after installs, archive extraction, or heavy file reads."
   elif [ "$anon" -gt $((200*1024*1024)) ]; then
     echo -e "\e[1;33mMain Cause:\e[0m Real process/application memory is high (anon memory)."
     echo -e "That means one or more running processes are actually holding RAM."
@@ -659,7 +831,179 @@ function reclaimram() {
 }
 
 # ==========================================
-# 📊 UI & DASHBOARD FUNCTIONS
+# CPU TOOLS
+# ==========================================
+
+function cputop() {
+  echo -e "\n\e[1;36m📈 Top Processes by CPU\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-7s │ %-8s │ %-6s │ %-10s │ %-10s │ %s\n" "PID" "USER" "CPU%" "RSS" "ELAPSED" "COMMAND"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  ps -eo pid=,user=,%cpu=,etime=,rss=,comm= --sort=-%cpu | head -n 15 | while read -r pid user cpu etime rss comm; do
+    used="$(_b2h "$((rss * 1024))")"
+    printf "  %-7s │ %-8.8s │ %-6s │ %-10s │ %-10s │ %s\n" "$pid" "$user" "${cpu}%" "$used" "$etime" "$comm"
+  done
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function cpuavg() {
+  local win="${1:-30}" avg limit pct label
+  avg=$(_cpu_avg_history "$win" 2>/dev/null || true)
+  if [ -z "$avg" ]; then
+    echo -e "\n\e[1;33mℹ No local CPU history yet. Run \e[1;36mcpu\e[0m or \e[1;36mcpulive\e[0m first.\n"
+    return 1
+  fi
+
+  limit=$(_cpu_limit)
+  pct=$(awk -v u="$avg" -v l="$limit" 'BEGIN{ if(l>0) printf "%.1f", (u/l)*100; else print "-" }')
+  label="$(_cpu_limit_label)"
+
+  echo -e "\n\e[1;36m🧠 Local CPU Average\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-20s : %s sec\n" "Window" "$win"
+  printf "  %-20s : %s vCPU\n" "Average Used" "$avg"
+  printf "  %-20s : %s\n" "Limit" "$label"
+  if [ "$pct" != "-" ]; then
+    printf "  %-20s : %s%%\n" "Percent of Limit" "$pct"
+  fi
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function cpuuse() {
+  local secs="${1:-${PHOENIX_CPU_SAMPLE_SECONDS:-2}}"
+  local data used limit pct thr_usec thr_pct thr_n psi_some psi_full sample avg30 limit_label
+
+  data="$(_cpu_measure "$secs")"
+  IFS='|' read -r used limit pct thr_usec thr_pct thr_n psi_some psi_full sample <<< "$data"
+  avg30=$(_cpu_avg_history 30 2>/dev/null || true)
+  limit_label="$(_cpu_limit_label)"
+
+  echo -e "\n\e[1;36m⚙ CPU (cgroup-based)\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-20s : %s sec\n" "Sample Window" "$sample"
+  printf "  %-20s : %s vCPU\n" "Used" "$used"
+  printf "  %-20s : %s\n" "Limit" "$limit_label"
+  if [ "$pct" != "-" ]; then
+    printf "  %-20s : %s%%\n" "Percent of Limit" "$pct"
+  else
+    printf "  %-20s : %s\n" "Percent of Limit" "shared / not fixed"
+  fi
+  if [ -n "$avg30" ]; then
+    printf "  %-20s : %s vCPU\n" "Local Avg (30s)" "$avg30"
+  fi
+  printf "  %-20s : %s\n" "Throttle Events" "$thr_n"
+  printf "  %-20s : %s%%\n" "Throttle Time" "$thr_pct"
+  printf "  %-20s : %s%%\n" "CPU PSI some avg10" "$psi_some"
+  printf "  %-20s : %s%%\n" "CPU PSI full avg10" "$psi_full"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  echo -e "\e[1;33mTip:\e[0m For a calmer number closer to dashboard trend, run \e[1;36mcpu 5\e[0m or \e[1;36mcpulive 2\e[0m.\n"
+}
+
+function cpuwhy() {
+  local secs="${1:-3}" data used limit pct thr_usec thr_pct thr_n psi_some psi_full sample avg30
+  data="$(_cpu_measure "$secs")"
+  IFS='|' read -r used limit pct thr_usec thr_pct thr_n psi_some psi_full sample <<< "$data"
+  avg30=$(_cpu_avg_history 30 2>/dev/null || true)
+
+  echo -e "\n\e[1;35m🔎 CPU Diagnosis\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+
+  if [ "$thr_n" -gt 0 ] || awk -v t="$thr_pct" 'BEGIN { exit !(t>0.1) }'; then
+    echo -e "\e[1;33mMain Cause:\e[0m CPU throttling happened during the sample."
+    echo -e "Your workload wanted more CPU time than the current cgroup scheduling allowed."
+  elif [ "$pct" != "-" ] && awk -v p="$pct" 'BEGIN { exit !(p>=70) }'; then
+    echo -e "\e[1;33mMain Cause:\e[0m Real CPU load is high."
+    echo -e "The container is actively using a large portion of its available CPU."
+  elif awk -v s="$psi_some" 'BEGIN { exit !(s>=5.0) }'; then
+    echo -e "\e[1;33mMain Cause:\e[0m CPU pressure is noticeable."
+    echo -e "Tasks are waiting to run, so host contention / scheduling delay may be contributing."
+  elif [ -n "$avg30" ] && awk -v a="$avg30" -v u="$used" 'BEGIN { exit !(a>0.05 && u<(a/2)) }'; then
+    echo -e "\e[1;33mMain Cause:\e[0m Current instant is calmer than recent history."
+    echo -e "Dashboard may still show the earlier spike while your latest sample is already lower."
+  else
+    echo -e "\e[1;33mMain Cause:\e[0m Current CPU usage looks low or moderate."
+    echo -e "If Railway shows a higher point, it was likely captured during an earlier time bucket."
+  fi
+
+  echo -e "\n\e[1;36mCurrent Sample:\e[0m"
+  echo -e "  Used           : ${used} vCPU"
+  echo -e "  Sample Window  : ${sample}s"
+  if [ "$pct" != "-" ]; then
+    echo -e "  Percent Limit  : ${pct}%"
+  else
+    echo -e "  Percent Limit  : shared / not fixed"
+  fi
+  echo -e "  Throttle Events: ${thr_n}"
+  echo -e "  Throttle Time  : ${thr_pct}%"
+  echo -e "  PSI some avg10 : ${psi_some}%"
+  echo -e "  PSI full avg10 : ${psi_full}%"
+  if [ -n "$avg30" ]; then
+    echo -e "  Local Avg 30s  : ${avg30} vCPU"
+  fi
+
+  echo -e "\n\e[1;32mWhat to do now:\e[0m"
+  echo -e "  1) Run \e[1;36mcpu 5\e[0m for a steadier reading"
+  echo -e "  2) Run \e[1;36mcputop\e[0m to catch busy processes"
+  echo -e "  3) Run \e[1;36mcpulive 2\e[0m for a live view"
+  echo -e "  4) Run \e[1;36mcginfo\e[0m to inspect raw cgroup CPU settings"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function cpulive() {
+  local secs="${1:-2}"
+  echo -e "\e[1;36mLive CPU monitor. Press Ctrl+C to stop.\e[0m"
+  sleep 1
+  while true; do
+    clear
+    cpuuse "$secs"
+    cputop
+  done
+}
+
+function cginfo() {
+  echo -e "\n\e[1;36m🧩 Raw cgroup info\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-22s : %s\n" "CPU mode" "$(_cpu_mode)"
+  printf "  %-22s : %s\n" "CPU limit label" "$(_cpu_limit_label)"
+  printf "  %-22s : %s\n" "Fallback vCPU" "${PHOENIX_CPU_FALLBACK_VCPU:-unset}"
+
+  if [ -f /sys/fs/cgroup/cpu.max ]; then
+    printf "  %-22s : %s\n" "cpu.max" "$(cat /sys/fs/cgroup/cpu.max 2>/dev/null)"
+  fi
+  if [ -f /sys/fs/cgroup/cpu.weight ]; then
+    printf "  %-22s : %s\n" "cpu.weight" "$(cat /sys/fs/cgroup/cpu.weight 2>/dev/null)"
+  fi
+  if [ -f /sys/fs/cgroup/cpuset.cpus.effective ]; then
+    printf "  %-22s : %s\n" "cpuset effective" "$(cat /sys/fs/cgroup/cpuset.cpus.effective 2>/dev/null)"
+  fi
+  if [ -f /sys/fs/cgroup/cpu.pressure ]; then
+    echo -e "  cpu.pressure            :"
+    sed 's/^/    /' /sys/fs/cgroup/cpu.pressure 2>/dev/null
+  fi
+  if [ -f /sys/fs/cgroup/cpu.stat ]; then
+    echo -e "  cpu.stat                :"
+    sed 's/^/    /' /sys/fs/cgroup/cpu.stat 2>/dev/null
+  fi
+
+  if [ -f /sys/fs/cgroup/memory.current ]; then
+    printf "  %-22s : %s\n" "memory.current" "$(cat /sys/fs/cgroup/memory.current 2>/dev/null)"
+  fi
+  if [ -f /sys/fs/cgroup/memory.max ]; then
+    printf "  %-22s : %s\n" "memory.max" "$(cat /sys/fs/cgroup/memory.max 2>/dev/null)"
+  fi
+
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function diag() {
+  mm
+  cpuwhy 3
+  ramwhy
+  cachefiles
+}
+
+# ==========================================
+# UI / DASHBOARD
 # ==========================================
 
 function custom_motd() {
@@ -713,7 +1057,8 @@ function custom_motd() {
 function mm() {
   local base used limit free used_mb limit_mb free_mb used_pct
   local anon file rss reclaimable slab_rec
-  local cpu_used cpu_pct
+  local cpu_data cpu_used cpu_limit cpu_pct cpu_thr cpu_thr_pct cpu_thr_n cpu_psi_some cpu_psi_full cpu_sample
+  local avg30
   local disk_total disk_used disk_free
   local home_items
   local C_C="\e[36m" C_G="\e[90m" C_W="\e[1;37m" C_R="\e[0m"
@@ -721,7 +1066,7 @@ function mm() {
   echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Accurate)${C_R}\n${C_G}------------------------------------------------------------${C_R}"
 
   print_row() {
-    echo -e " $1   ${C_W}$(printf "%-5s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-13s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-13s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-14s" "$5")${C_R}"
+    echo -e " $1   ${C_W}$(printf "%-6s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-16s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-16s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-16s" "$5")${C_R}"
   }
 
   base="$(_cg_base)"
@@ -759,21 +1104,18 @@ function mm() {
 
   print_row "≣" "CACHE" "$((file / 1024 / 1024))MB File" "$((anon / 1024 / 1024))MB Anon" "${rss} RSS"
 
-  if [ -f /sys/fs/cgroup/cpu.stat ]; then
-    u1=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
-    sleep 0.5
-    u2=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0)
-    cpu_used=$(awk -v a="$u1" -v b="$u2" 'BEGIN { v=(b-a)/500000; if(v<0) v=0; printf "%.2f", v }')
-  elif [ -f /sys/fs/cgroup/cpuacct/cpuacct.usage ]; then
-    u1=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
-    sleep 0.5
-    u2=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0)
-    cpu_used=$(awk -v a="$u1" -v b="$u2" 'BEGIN { v=(b-a)/500000000; if(v<0) v=0; printf "%.2f", v }')
+  cpu_data="$(_cpu_measure "${PHOENIX_MM_CPU_SAMPLE_SECONDS:-2}")"
+  IFS='|' read -r cpu_used cpu_limit cpu_pct cpu_thr cpu_thr_pct cpu_thr_n cpu_psi_some cpu_psi_full cpu_sample <<< "$cpu_data"
+  avg30=$(_cpu_avg_history 30 2>/dev/null || true)
+
+  if awk -v v="$cpu_limit" 'BEGIN { exit !(v>0) }'; then
+    print_row "⚙" "CPU" "${cpu_limit} vCPU Max" "${cpu_used} vCPU ${cpu_sample}s" "${cpu_pct}% Limit"
   else
-    cpu_used=$(ps -eo %cpu | awk 'NR>1 {sum+=$1} END {printf "%.2f", sum/100}')
+    print_row "⚙" "CPU" "shared/auto" "${cpu_used} vCPU ${cpu_sample}s" "no fixed cap"
   fi
-  cpu_pct=$(awk -v v="$cpu_used" 'BEGIN { printf "%.1f%%", (v/2)*100 }')
-  print_row "⚙" "CPU" "2.0 vCPU Max" "${cpu_used} vCPU" "(${cpu_pct} Used)"
+
+  if [ -z "$avg30" ]; then avg30="$cpu_used"; fi
+  print_row "⌁" "CPU+" "${avg30} vCPU 30s" "${cpu_thr_pct}% Throttle" "${cpu_psi_some}% PSI10"
 
   disk_total=$(df -h / 2>/dev/null | awk 'NR==2 {print $2}')
   disk_used=$(df -h / 2>/dev/null | awk 'NR==2 {print $3}')
@@ -788,8 +1130,9 @@ function mm() {
   print_row "▣" "HOME" "${home_items} Items" "$USER" "$HOME"
 
   echo -e "${C_G}------------------------------------------------------------${C_R}"
-  echo -e " ${C_W}RAM%${C_R}   ${C_G}::${C_R}  ${C_C}${used_pct}${C_R}"
-  echo -e " ${C_W}CACHE${C_R} ${C_G}::${C_R}  ${C_C}${reclaimable}MB likely reclaimable${C_R}"
+  echo -e " ${C_W}RAM%${C_R}    ${C_G}::${C_R}  ${C_C}${used_pct}${C_R}"
+  echo -e " ${C_W}CACHE${C_R}   ${C_G}::${C_R}  ${C_C}${reclaimable}MB likely reclaimable${C_R}"
+  echo -e " ${C_W}CPU NOW${C_R} ${C_G}::${C_R}  ${C_C}${cpu_used} vCPU (${cpu_sample}s avg)${C_R}"
   echo -e "${C_G}------------------------------------------------------------${C_R}\n"
 }
 
@@ -856,6 +1199,7 @@ if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
     echo -e "\e[1;33m🔥 Quick Actions:\e[0m"
     printf "   \e[1;32m%-10s\e[0m : %s\n" "cc" "Connect VPN"
     printf "   \e[1;32m%-10s\e[0m : %s\n" "ram" "Detailed RAM Info"
+    printf "   \e[1;32m%-10s\e[0m : %s\n" "cpu5" "Steady CPU view"
     printf "   \e[1;32m%-10s\e[0m : %s\n" "dcodex" "Show Codex status"
     printf "   \e[1;36m%-10s\e[0m : \e[1;36m%s\e[0m\n\n" "cmds" "View ALL Shortcuts ⚡"
 fi
