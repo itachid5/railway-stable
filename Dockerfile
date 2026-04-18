@@ -6,7 +6,7 @@ ENV COLORTERM=truecolor
 # ঢাকা, বাংলাদেশ টাইমজোন সেট করা হচ্ছে
 ENV TZ="Asia/Dhaka"
 
-# প্রয়োজনীয় প্যাকেজ এবং টাইমজোন (tzdata) সেটআপ (python3 যোগ করা হয়েছে 'serve' কমান্ডের জন্য)
+# প্রয়োজনীয় প্যাকেজ এবং টাইমজোন (tzdata) সেটআপ
 RUN apt-get update && apt-get install -y \
     tzdata openssh-server sudo curl wget git nano procps net-tools iputils-ping dnsutils lsof htop jq speedtest-cli unzip tree python3 \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
@@ -107,7 +107,6 @@ alias kp='sudo pkill -f python 2>/dev/null; echo -e "\e[1;32m✔ All Python apps
 # 🛠️ CUSTOM SHORTCUT MANAGER
 # ==========================================
 
-# কাস্টম শর্টকাট সেভ করার ফাইল লোড করা
 CUSTOM_ALIAS_FILE="$HOME/.my_shortcuts"
 if [ -f "$CUSTOM_ALIAS_FILE" ]; then
     source "$CUSTOM_ALIAS_FILE"
@@ -119,7 +118,6 @@ function addcmd() {
     read -p "Shortcut Name (e.g., gohome) : " S_NAME
     if [ -z "$S_NAME" ]; then echo -e "\e[1;31m✘ Cancelled. Name cannot be empty.\e[0m"; return 1; fi
     
-    # Check if alias already exists in custom file
     if grep -q "alias $S_NAME=" "$CUSTOM_ALIAS_FILE" 2>/dev/null; then
         echo -e "\e[1;33mℹ Shortcut '$S_NAME' already exists! Please choose another name.\e[0m"
         return 1
@@ -144,7 +142,6 @@ function delcmd() {
         return 1
     fi
 
-    # ডিলিট করার কমান্ড
     sed -i "/alias $S_NAME=/d" "$CUSTOM_ALIAS_FILE"
     unalias "$S_NAME" 2>/dev/null
     echo -e "\e[1;32m✔ Shortcut '$S_NAME' has been successfully deleted!\e[0m\n"
@@ -155,7 +152,6 @@ function delcmd() {
 # ==========================================
 
 function pcmd() {
-    # এই ফাংশনটি লেখাগুলোকে একদম পারফেক্টলি অ্যালাইন করবে (একটু স্পেস বাড়ানো হয়েছে)
     printf "   \e[1;32m%-12s\e[0m : %s\n" "$1" "$2"
 }
 
@@ -218,7 +214,6 @@ function cmds() {
     # Custom Shortcuts Section
     echo -e "\n\e[1;35m👤 My Personal Shortcuts\e[0m"
     if [ -f "$CUSTOM_ALIAS_FILE" ] && [ -s "$CUSTOM_ALIAS_FILE" ]; then
-        # রিড করে পারফেক্ট অ্যালাইনে প্রিন্ট করা
         cat "$CUSTOM_ALIAS_FILE" | sed "s/alias //g" | sed "s/='/|/g" | sed "s/'//g" | while IFS='|' read -r name cmd; do
             pcmd "$name" "$cmd"
         done
@@ -269,7 +264,7 @@ function ramtop() {
 alias ram='ramtop'
 
 # ==========================================
-# 📊 UI & DASHBOARD FUNCTIONS
+# 📊 UI & DASHBOARD FUNCTIONS (UPDATED FOR CONTAINER)
 # ==========================================
 
 function custom_motd() {
@@ -286,7 +281,6 @@ function custom_motd() {
         LAST_LOGIN_IP="---"
     fi
     
-    # বর্তমান লগইন এর সময় ১২-ঘণ্টা ফরমেটে এবং আইপি আলাদাভাবে সেভ করা হচ্ছে
     CURRENT_IP=$(echo $SSH_CLIENT | awk '{print $1}')
     echo "$(date +"%A, %d %B %Y %I:%M:%S %p")|${CURRENT_IP:-Local}" > "$LAST_LOGIN_FILE"
     
@@ -307,36 +301,26 @@ function custom_motd() {
 
 function mm() {
     C_C="\e[36m"; C_G="\e[90m"; C_W="\e[1;37m"; C_R="\e[0m"
-    echo -e "\n${C_W}▶ SYSTEM MONITOR${C_R}\n${C_G}------------------------------------------------------------${C_R}"
-    print_row() { echo -e " $1   ${C_W}$(printf "%-5s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-11s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-11s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-12s" "$5")${C_R}"; }
+    echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Stats Only)${C_R}\n${C_G}------------------------------------------------------------${C_R}"
+    print_row() { echo -e " $1   ${C_W}$(printf "%-5s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-13s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-13s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-14s" "$5")${C_R}"; }
     
+    # 1. RAM (Container Specific)
     RAM_MAX=$(cat /sys/fs/cgroup/memory.max 2>/dev/null); RAM_USED_KB=$(ps -eo rss | awk 'NR>1 {sum+=$1} END {if(sum=="") sum=0; print sum}'); RAM_USED_MB=$((RAM_USED_KB / 1024))
-    if [[ "$RAM_MAX" =~ ^[0-9]+$ ]]; then RAM_MAX_MB=$((RAM_MAX / 1024 / 1024)); RAM_FREE_MB=$((RAM_MAX_MB - RAM_USED_MB)); R1="${RAM_MAX_MB}MB Max"; R2="${RAM_USED_MB}MB Used"; R3="${RAM_FREE_MB}MB Free"; else R1="Unlimited"; R2="${RAM_USED_MB}MB Used"; R3="---"; fi
+    if [[ "$RAM_MAX" =~ ^[0-9]+$ ]]; then RAM_MAX_MB=$((RAM_MAX / 1024 / 1024)); RAM_FREE_MB=$((RAM_MAX_MB - RAM_USED_MB)); R1="${RAM_MAX_MB}MB Max"; R2="${RAM_USED_MB}MB Used"; R3="${RAM_FREE_MB}MB Free"; else R1="Unlimited"; R2="${RAM_USED_MB}MB Used"; R3="Container Only"; fi
     
-    MAX_CPU=""
-    if [ -f /sys/fs/cgroup/cpu.max ]; then
-        QUOTA=$(awk '{print $1}' /sys/fs/cgroup/cpu.max 2>/dev/null); PERIOD=$(awk '{print $2}' /sys/fs/cgroup/cpu.max 2>/dev/null)
-        if [ "$QUOTA" != "max" ] && [ -n "$QUOTA" ] && [ "$QUOTA" -gt 0 ] 2>/dev/null; then MAX_CPU=$(( (QUOTA * 100) / PERIOD )); fi
-    fi
-    if [ -z "$MAX_CPU" ]; then MAX_CPU=200; fi
+    # 2. CPU (Sum of CPU% from processes running inside this container ONLY)
+    CPU_USED=$(ps -eo %cpu | awk 'NR>1 {sum+=$1} END {printf "%.1f", sum}')
+    [ -z "$CPU_USED" ] && CPU_USED="0.0"
+    C1="Unlimited"; C2="${CPU_USED}% Used"; C3="Container Only"
 
-    CPU_USED=0
-    if [ -f /sys/fs/cgroup/cpu.stat ]; then
-        u1=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0); sleep 0.2
-        u2=$(awk '/^usage_usec/ {print $2}' /sys/fs/cgroup/cpu.stat 2>/dev/null || echo 0); delta=$((u2 - u1)); [ "$delta" -gt 0 ] && CPU_USED=$((delta / 2000))
-    elif [ -f /sys/fs/cgroup/cpuacct/cpuacct.usage ]; then
-        u1=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0); sleep 0.2
-        u2=$(cat /sys/fs/cgroup/cpuacct/cpuacct.usage 2>/dev/null || echo 0); delta=$((u2 - u1)); [ "$delta" -gt 0 ] && CPU_USED=$((delta / 2000000))
-    else CPU_USED=$(top -bn1 | awk '/Cpu/ {print $2}' | cut -f 1 -d "."); fi
-
-    if [ "$CPU_USED" -lt 0 ]; then CPU_USED=0; fi
-    if [ "$CPU_USED" -gt "$MAX_CPU" ]; then CPU_USED=$MAX_CPU; fi
-    CPU_FREE=$((MAX_CPU - CPU_USED))
+    # 3. DISK (Calculating exactly how much disk space files inside the container are using)
+    D_USED=$(du -sh --exclude=/proc --exclude=/sys --exclude=/dev / 2>/dev/null | awk '{print $1}')
+    [ -z "$D_USED" ] && D_USED="0B"
+    D1="Unlimited"; D2="${D_USED} Used"; D3="Container Only"
     
-    C1="${MAX_CPU}% Max"; C2="${CPU_USED}% Used"; C3="${CPU_FREE}% Free"
-
-    D_MAX=$(df -h / | awk 'NR==2 {print $2}'); D_USED=$(df -h / | awk 'NR==2 {print $3}'); D_FREE=$(df -h / | awk 'NR==2 {print $4}'); D1="${D_MAX} Max"; D2="${D_USED} Used"; D3="${D_FREE} Free"
-    HOME_USAGE=$(du -sh ~ 2>/dev/null | awk '{print $1}'); F1="---"; F2="${HOME_USAGE} Used"; F3="/home/$USER"
+    # 4. FILES (Home Directory size)
+    HOME_USAGE=$(du -sh ~ 2>/dev/null | awk '{print $1}')
+    F1="---"; F2="${HOME_USAGE} Used"; F3="/home/$USER"
     
     print_row "❖" "RAM" "$R1" "$R2" "$R3"; print_row "⚙" "CPU" "$C1" "$C2" "$C3"; print_row "⛁" "DISK" "$D1" "$D2" "$D3"; print_row "▣" "FILES" "$F1" "$F2" "$F3"
     echo -e "${C_G}------------------------------------------------------------${C_R}\n"
