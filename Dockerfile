@@ -98,6 +98,11 @@ alias api='curl -s'
 # আবহাওয়া ঢাকার জন্য সেট করা হয়েছে
 alias weather='curl -s wttr.in/Dhaka?0'
 
+# 🌟 NEW: Python Venv Shortcuts
+alias mkv='python3 -m venv .venv && echo -e "\e[1;32m✔ .venv created successfully!\e[0m"'
+alias onv='source .venv/bin/activate 2>/dev/null || echo -e "\e[1;31m✘ .venv not found! Run mkv first.\e[0m"'
+alias offv='deactivate 2>/dev/null || echo -e "\e[1;33mℹ No active virtual environment to deactivate.\e[0m"'
+
 # Apps Management
 alias apps='echo -e "\n\e[1;36m▶ Node/Python Apps:\e[0m"; ps -eo pid,user,%cpu,%mem,command | grep -E "[n]ode|[p]ython" || echo -e "\e[90mNone\e[0m"'
 alias kn='sudo pkill -f node 2>/dev/null; echo -e "\e[1;32m✔ All Node apps stopped.\e[0m"'
@@ -210,6 +215,14 @@ function cmds() {
     pcmd "gs, ga, gc" "Git Status, Add, Commit"
     pcmd "addcmd" "Create a personal custom shortcut!"
     pcmd "delcmd" "Delete a personal custom shortcut!"
+    pcmd "mkv" "Create new .venv (python3 -m venv) 🌟"
+    pcmd "onv" "Activate .venv (source .venv/bin/...) 🌟"
+    pcmd "offv" "Deactivate current virtual env 🌟"
+    pcmd "sv" "Smart Activate Virtual Env (venv/.venv/env) 🌟"
+    pcmd "dcodex" "Auto-install Node.js & run Codex 🌟"
+    pcmd "dpy" "Auto-install Python, Pip & Virtualenv 🌟"
+    pcmd "dgo" "Auto-install Golang 🌟"
+    pcmd "djava" "Auto-install Java 17 LTS 🌟"
     
     # Custom Shortcuts Section
     echo -e "\n\e[1;35m👤 My Personal Shortcuts\e[0m"
@@ -243,6 +256,66 @@ function ex() {
             *.zip) unzip "$1" ;; *) echo -e "\e[1;31m✘ Cannot extract '$1'\e[0m" ;;
         esac
     else echo -e "\e[1;31m✘ '$1' is not a valid file\e[0m"; fi
+}
+
+# ==========================================
+# 🌟 NEW DEV SHORTCUTS & INSTALLERS
+# ==========================================
+
+function sv() {
+    if [ -f "venv/bin/activate" ]; then source venv/bin/activate; echo -e "\e[1;32m✔ venv activated!\e[0m";
+    elif [ -f ".venv/bin/activate" ]; then source .venv/bin/activate; echo -e "\e[1;32m✔ .venv activated!\e[0m";
+    elif [ -f "env/bin/activate" ]; then source env/bin/activate; echo -e "\e[1;32m✔ env activated!\e[0m";
+    else echo -e "\e[1;31m✘ No virtual environment (venv, .venv, env) found in this directory!\e[0m\n\e[1;33mℹ Run 'mkv' to create one.\e[0m"; fi
+}
+
+function dcodex() {
+    export NVM_DIR="$HOME/.nvm"
+    if [ ! -d "$NVM_DIR" ]; then
+        echo -e "\n\e[1;33m⌛ Installing NVM & Node.js...\e[0m"
+        sudo apt update && sudo apt install -y curl
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+    fi
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    
+    if ! command -v node &> /dev/null; then
+        echo -e "\e[1;33m⌛ Installing Node LTS...\e[0m"
+        nvm install --lts
+    fi
+    
+    if ! command -v codex &> /dev/null; then
+        echo -e "\e[1;33m⌛ Installing OpenAI Codex...\e[0m"
+        npm i -g @openai/codex
+    fi
+    
+    echo -e "\e[1;32m✔ Setup Complete!\e[0m"
+    echo -e "\e[1;36mNode Version:\e[0m $(node -v)"
+    echo -e "\e[1;36mNPM Version:\e[0m $(npm -v)"
+    echo -e "\e[1;32m▶ Running Codex...\e[0m"
+    codex
+}
+
+function dpy() {
+    echo -e "\n\e[1;36m🐍 Setting up Python, Pip & Virtualenv...\e[0m"
+    sudo apt update
+    sudo apt install -y python3 python3-pip python3-venv
+    echo -e "\e[1;32m✔ Python environment is ready!\e[0m"
+    echo -e "\e[1;36mPython Version:\e[0m $(python3 --version 2>&1)"
+    echo -e "\e[1;36mPip Version:\e[0m $(pip3 --version 2>&1)"
+}
+
+function dgo() {
+    echo -e "\n\e[1;36m🐹 Installing Golang...\e[0m"
+    sudo apt update && sudo apt install -y golang
+    echo -e "\e[1;32m✔ Go installed successfully!\e[0m"
+    go version
+}
+
+function djava() {
+    echo -e "\n\e[1;36m☕ Installing Java 17 LTS...\e[0m"
+    sudo apt update && sudo apt install -y openjdk-17-jdk openjdk-17-jre
+    echo -e "\e[1;32m✔ Java installed successfully!\e[0m"
+    java -version
 }
 
 # ==========================================
@@ -326,10 +399,10 @@ function mm() {
     echo -e "${C_G}------------------------------------------------------------${C_R}\n"
 }
 
-# কানেক্ট ফাংশন (cc) এবং (cs)
+# কানেক্ট ফাংশন (cc) এবং (cs) [আপডেট করা হয়েছে: Tailscale এখন পুরোপুরি ব্যাকগ্রাউন্ডে চলবে]
 function cc() {
     if pgrep -x "tailscaled" > /dev/null; then echo -e "\e[1;33mℹ Tailscale daemon is running.\e[0m"
-    else echo -e "\e[1;33m⌛ Starting Tailscale...\e[0m"; sudo tailscaled --tun=userspace-networking --socks5-server=localhost:1055 & sleep 3; fi
+    else echo -e "\e[1;33m⌛ Starting Tailscale in background...\e[0m"; nohup sudo tailscaled --tun=userspace-networking --socks5-server=localhost:1055 > /dev/null 2>&1 & sleep 3; fi
 
     TS_KEY_FILE="$HOME/.ts_auth_key"; TS_KEY=""
     if [ -f "$TS_KEY_FILE" ]; then
