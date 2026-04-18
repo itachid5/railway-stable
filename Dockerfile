@@ -6,14 +6,14 @@ ENV COLORTERM=truecolor
 # ঢাকা, বাংলাদেশ টাইমজোন সেট করা হচ্ছে
 ENV TZ="Asia/Dhaka"
 
-# প্রয়োজনীয় প্যাকেজ এবং টাইমজোন (tzdata) সেটআপ
+# প্রয়োজনীয় প্যাকেজ এবং টাইমজোন (tzdata) সেটআপ (python3 যোগ করা হয়েছে 'serve' কমান্ডের জন্য)
 RUN apt-get update && apt-get install -y \
-    tzdata openssh-server sudo curl wget git nano procps net-tools iputils-ping dnsutils lsof htop jq speedtest-cli unzip tree \
+    tzdata openssh-server sudo curl wget git nano procps net-tools iputils-ping dnsutils lsof htop jq speedtest-cli unzip tree python3 \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && curl -fsSL https://tailscale.com/install.sh | sh \
     && rm -rf /var/lib/apt/lists/*
 
-# SSH ফোল্ডার তৈরি এবং ইউজার/পাসওয়ার্ড সেটআপ
+# SSH ফোল্ডার তৈরি এবং ইউজার/পাসওয়ার্ড সেটআপ
 RUN mkdir -p /var/run/sshd && \
     useradd -m -s /bin/bash -u 1000 devuser && \
     echo "devuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
@@ -23,7 +23,7 @@ RUN mkdir -p /var/run/sshd && \
     echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
     echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
 
-# ডিফল্ট ওয়েলকাম মেসেজ বন্ধ করা হচ্ছে
+# ডিফল্ট ওয়েলকাম মেসেজ বন্ধ করা হচ্ছে
 RUN rm -rf /etc/update-motd.d/* && \
     rm -f /etc/legal && \
     rm -f /etc/motd && \
@@ -55,6 +55,12 @@ alias grep='grep --color=auto'
 alias h='history'
 alias findbig='find . -type f -size +50M -exec ls -lh {} + 2>/dev/null | awk "{ print \$9 \": \" \$5 }"'
 
+# 🌟 NEW: Extra File & Nav Shortcuts
+alias dsize='du -h --max-depth=1 | sort -hr'
+alias chmodx='chmod +x'
+alias chownme='sudo chown -R $USER:$USER .'
+alias path='echo -e ${PATH//:/\\n}'
+
 # System
 alias up='sudo apt-get update && sudo apt-get upgrade -y'
 alias clean='sudo apt-get autoremove -y && sudo apt-get clean'
@@ -65,11 +71,21 @@ alias ports='sudo netstat -tulpn'
 alias logs='sudo tail -f /var/log/syslog'
 alias rst='source ~/.bashrc && echo -e "\e[1;32m✔ Terminal Reloaded!\e[0m"'
 
+# 🌟 NEW: Extra System Shortcuts
+alias sysinfo='cat /etc/os-release'
+alias cpuinfo='lscpu'
+alias myports='ss -tuln'
+alias histg='history | grep'
+
 # Network & VPN
 alias myip='echo -e "\n\e[1;36m🌐 IP Details:\e[0m"; curl -s ipinfo.io; echo'
 alias speed='echo -e "\e[1;33m⌛ Testing Speed...\e[0m"; speedtest-cli --simple'
 alias ping='ping -c 4'
 alias ts='sudo tailscale status'
+
+# 🌟 NEW: Extra Network Shortcuts
+alias pinger='ping -c 4 8.8.8.8'
+alias serve='python3 -m http.server 8000'
 
 # Dev & Tools
 alias gs='git status'
@@ -91,6 +107,7 @@ alias kp='sudo pkill -f python 2>/dev/null; echo -e "\e[1;32m✔ All Python apps
 # 🛠️ CUSTOM SHORTCUT MANAGER
 # ==========================================
 
+# কাস্টম শর্টকাট সেভ করার ফাইল লোড করা
 CUSTOM_ALIAS_FILE="$HOME/.my_shortcuts"
 if [ -f "$CUSTOM_ALIAS_FILE" ]; then
     source "$CUSTOM_ALIAS_FILE"
@@ -102,6 +119,7 @@ function addcmd() {
     read -p "Shortcut Name (e.g., gohome) : " S_NAME
     if [ -z "$S_NAME" ]; then echo -e "\e[1;31m✘ Cancelled. Name cannot be empty.\e[0m"; return 1; fi
     
+    # Check if alias already exists in custom file
     if grep -q "alias $S_NAME=" "$CUSTOM_ALIAS_FILE" 2>/dev/null; then
         echo -e "\e[1;33mℹ Shortcut '$S_NAME' already exists! Please choose another name.\e[0m"
         return 1
@@ -126,6 +144,7 @@ function delcmd() {
         return 1
     fi
 
+    # ডিলিট করার কমান্ড
     sed -i "/alias $S_NAME=/d" "$CUSTOM_ALIAS_FILE"
     unalias "$S_NAME" 2>/dev/null
     echo -e "\e[1;32m✔ Shortcut '$S_NAME' has been successfully deleted!\e[0m\n"
@@ -136,57 +155,83 @@ function delcmd() {
 # ==========================================
 
 function pcmd() {
-    printf "   \e[1;32m%-10s\e[0m : %s\n" "$1" "$2"
+    # এই ফাংশনটি লেখাগুলোকে একদম পারফেক্টলি অ্যালাইন করবে (একটু স্পেস বাড়ানো হয়েছে)
+    printf "   \e[1;32m%-12s\e[0m : %s\n" "$1" "$2"
 }
 
 function cmds() {
     echo -e "\n\e[1;37m⚡ ALL MAGICAL SHORTCUTS ⚡\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────\e[0m"
+    echo -e "\e[90m─────────────────────────────────────────────────────────\e[0m"
     
     echo -e "\e[1;33m📁 Navigation & Files\e[0m"
     pcmd "c" "Clear screen"
     pcmd ".." "Go back 1 folder"
-    pcmd "ll" "List files with details"
-    pcmd "sz" "Show folder sizes"
-    pcmd "tree" "Visual tree structure"
-    pcmd "findbig" "Find files > 50MB"
+    pcmd "..." "Go back 2 folders"
+    pcmd "ll" "List files with details & sizes"
+    pcmd "sz" "Show size of folders/files in current dir"
+    pcmd "md" "Make a new directory (e.g., md newfolder)"
+    pcmd "mkcd <dir>" "Make a directory and instantly enter it 🌟"
+    pcmd "tree" "Show files in a visual tree structure"
+    pcmd "dsize" "List size of all sub-folders cleanly 🌟"
+    pcmd "chownme" "Take ownership of current directory 🌟"
+    pcmd "chmodx" "Make a file executable quickly 🌟"
+    pcmd "ex <file>" "Extract ANY archive (zip, tar, gz, etc.)"
+    pcmd "findbig" "Find files larger than 50MB"
+    pcmd "findtext" "Search inside all files for a specific text 🌟"
     
-    echo -e "\n\e[1;33m💻 System & Monitoring\e[0m"
-    pcmd "up" "Update OS"
-    pcmd "mem" "Quick RAM summary"
-    pcmd "ram" "Detailed RAM usage by processes 🔥"
-    pcmd "df" "Disk usage"
-    pcmd "top" "Task Manager (htop)"
-    pcmd "ports" "List open ports"
-    pcmd "rst" "Reload terminal"
+    echo -e "\n\e[1;33m💻 System & Processes\e[0m"
+    pcmd "up" "Update and upgrade OS packages"
+    pcmd "clean" "Clean system cache and junk files"
+    pcmd "mem" "Show RAM usage"
+    pcmd "ram" "Detailed Container RAM Breakdown 🔥"
+    pcmd "df" "Show Disk space usage"
+    pcmd "top" "Open Task Manager (htop)"
+    pcmd "cpuinfo" "Show CPU information 🌟"
+    pcmd "sysinfo" "Show OS version details 🌟"
+    pcmd "ports" "List all currently open ports"
+    pcmd "logs" "View live system logs"
+    pcmd "rst" "Reload terminal settings (bashrc)"
+    pcmd "h" "Show command history"
+    pcmd "histg <txt>" "Search command history for specific text 🌟"
     
     echo -e "\n\e[1;33m🎯 App Management\e[0m"
-    pcmd "apps" "List Node/Python apps"
-    pcmd "kn/kp" "Kill Node/Python apps"
-    pcmd "kport" "Kill app on specific port"
+    pcmd "apps" "List all running Node/Python apps"
+    pcmd "kn" "Kill all Node.js apps"
+    pcmd "kp" "Kill all Python apps"
+    pcmd "kport <no>" "Kill app running on a specific port"
     
     echo -e "\n\e[1;33m🌐 Network & VPN\e[0m"
-    pcmd "cc/cs" "Connect/Disconnect VPN"
-    pcmd "myip" "Show Public IP"
-    pcmd "speed" "Test Internet speed"
+    pcmd "cc" "Connect to Tailscale VPN"
+    pcmd "cs" "Disconnect & Stop Tailscale VPN"
+    pcmd "ts" "Show Tailscale Status"
+    pcmd "myip" "Show Public IP and full location info"
+    pcmd "pinger" "Quickly check internet connectivity 🌟"
+    pcmd "speed" "Test Internet Download/Upload speed"
+    pcmd "serve" "Instantly host current folder on port 8000 🌟"
     
     echo -e "\n\e[1;33m🛠️ Tools & Dev\e[0m"
-    pcmd "weather" "Weather in Dhaka"
-    pcmd "ex" "Extract any file"
-    pcmd "addcmd" "Create custom shortcut"
+    pcmd "weather" "Show current weather in Dhaka"
+    pcmd "gs, ga, gc" "Git Status, Add, Commit"
+    pcmd "addcmd" "Create a personal custom shortcut!"
+    pcmd "delcmd" "Delete a personal custom shortcut!"
     
+    # Custom Shortcuts Section
     echo -e "\n\e[1;35m👤 My Personal Shortcuts\e[0m"
     if [ -f "$CUSTOM_ALIAS_FILE" ] && [ -s "$CUSTOM_ALIAS_FILE" ]; then
+        # রিড করে পারফেক্ট অ্যালাইনে প্রিন্ট করা
         cat "$CUSTOM_ALIAS_FILE" | sed "s/alias //g" | sed "s/='/|/g" | sed "s/'//g" | while IFS='|' read -r name cmd; do
             pcmd "$name" "$cmd"
         done
     else
-        echo -e "   \e[90mNo personal shortcuts yet.\e[0m"
+        echo -e "   \e[90mNo personal shortcuts yet. Type 'addcmd' to create one.\e[0m"
     fi
-    echo -e "\e[90m────────────────────────────────────────────────────\e[0m\n"
+    echo -e "\e[90m─────────────────────────────────────────────────────────\e[0m\n"
 }
 
 # Advanced Functions
+function mkcd() { mkdir -p "$1" && cd "$1"; }
+function findtext() { grep -rnw . -e "$1"; }
+
 function kport() {
     if [ -z "$1" ]; then echo -e "\e[1;31m✘ Usage: kport <port>\e[0m"; return 1; fi
     PID=$(sudo lsof -t -i:$1)
@@ -241,6 +286,7 @@ function custom_motd() {
         LAST_LOGIN_IP="---"
     fi
     
+    # বর্তমান লগইন এর সময় ১২-ঘণ্টা ফরমেটে এবং আইপি আলাদাভাবে সেভ করা হচ্ছে
     CURRENT_IP=$(echo $SSH_CLIENT | awk '{print $1}')
     echo "$(date +"%A, %d %B %Y %I:%M:%S %p")|${CURRENT_IP:-Local}" > "$LAST_LOGIN_FILE"
     
