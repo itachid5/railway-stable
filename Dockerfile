@@ -1137,13 +1137,11 @@ function mm() {
   if [ -z "$avg30" ]; then avg30="$cpu_used"; fi
   print_row "⌁" "CPU+" "${avg30} vCPU 30s" "${cpu_thr_pct}% Throttle" "${cpu_psi_some}% PSI10"
 
-  disk_total=$(df -h / 2>/dev/null | awk 'NR==2 {print $2}')
-  disk_used=$(df -h / 2>/dev/null | awk 'NR==2 {print $3}')
+  disk_used=$(du -sh / --exclude=/proc --exclude=/sys --exclude=/dev 2>/dev/null | cut -f1)
   disk_free=$(df -h / 2>/dev/null | awk 'NR==2 {print $4}')
-  [ -z "$disk_total" ] && disk_total="?"
   [ -z "$disk_used" ] && disk_used="?"
   [ -z "$disk_free" ] && disk_free="?"
-  print_row "⛁" "DISK" "${disk_total} Total" "${disk_used} Used" "${disk_free} Free"
+  print_row "⛁" "DISK" "Container Use" "${disk_used} Used" "${disk_free} Free"
 
   home_items=$(find "$HOME" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
   [ -z "$home_items" ] && home_items="0"
