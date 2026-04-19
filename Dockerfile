@@ -7,6 +7,7 @@ ENV TERM=xterm-256color
 ENV COLORTERM=truecolor
 ENV TZ="Asia/Dhaka"
 
+# Cleaner package-manager behavior
 ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV NPM_CONFIG_AUDIT=false
@@ -14,51 +15,60 @@ ENV NPM_CONFIG_FUND=false
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 ENV NPM_CONFIG_CACHE=/tmp/.npm-cache
 
+# Phoenix runtime tuning
 ENV PHOENIX_CPU_SAMPLE_SECONDS=2
 ENV PHOENIX_MM_CPU_SAMPLE_SECONDS=2
 ENV PHOENIX_CPU_FALLBACK_VCPU=
-ENV PHOENIX_CPU_HISTORY_FILE=/var/tmp/phoenix-state/cpu_history.log
+ENV PHOENIX_CPU_HISTORY_FILE=/tmp/.phoenix_cpu_history
+ENV PHOENIX_STATE_DIR=/tmp/.phoenix_state
+ENV PHOENIX_CDISK_CACHE_SECONDS=60
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tzdata openssh-server sudo curl wget git nano procps net-tools iputils-ping dnsutils \
-    lsof htop jq speedtest-cli unzip tree python3 python3-pip python3-venv \
-    ca-certificates gnupg iproute2 netcat-openbsd \
-    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
-    && echo $TZ > /etc/timezone \
-    && curl -fsSL https://tailscale.com/install.sh | sh \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/* /var/tmp/*
+# --------------------------------------------------
+# Base system packages
+# --------------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends     tzdata openssh-server sudo curl wget git nano procps net-tools iproute2 iputils-ping dnsutils     lsof htop jq speedtest-cli unzip tree python3 python3-pip python3-venv     ca-certificates gnupg psmisc     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime     && echo $TZ > /etc/timezone     && curl -fsSL https://tailscale.com/install.sh | sh     && apt-get clean     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/* /var/tmp/*
 
-RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
-    && apt-get install -y --no-install-recommends nodejs \
-    && npm i -g @openai/codex --cache /tmp/.npm-cache --no-audit --no-fund \
-    && npm cache clean --force \
-    && rm -rf /tmp/.npm-cache /root/.npm /root/.cache/npm /root/.cache/node-gyp \
-    && apt-get purge -y --auto-remove gnupg \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/* /var/tmp/*
+# --------------------------------------------------
+# Install Node.js LTS + Codex at build time
+# --------------------------------------------------
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -     && apt-get install -y --no-install-recommends nodejs     && npm i -g @openai/codex --cache /tmp/.npm-cache --no-audit --no-fund     && npm cache clean --force     && rm -rf /tmp/.npm-cache /root/.npm /root/.cache/npm /root/.cache/node-gyp     && apt-get purge -y --auto-remove gnupg     && apt-get clean     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /tmp/* /var/tmp/*
 
-RUN mkdir -p /var/run/sshd /var/tmp/phoenix-state && chmod 1777 /var/tmp/phoenix-state && \
-    useradd -m -s /bin/bash -u 1000 devuser && \
-    echo "devuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
-    echo "devuser:123456" | chpasswd && \
-    echo "root:123456" | chpasswd && \
-    echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config && \
-    echo "PermitRootLogin yes" >> /etc/ssh/sshd_config && \
-    echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
+# --------------------------------------------------
+# SSH + users
+# --------------------------------------------------
+RUN mkdir -p /var/run/sshd     && useradd -m -s /bin/bash -u 1000 devuser     && echo "devuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers     && echo "devuser:123456" | chpasswd     && echo "root:123456" | chpasswd     && echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config     && echo "PermitRootLogin yes" >> /etc/ssh/sshd_config     && echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
 
-RUN rm -rf /etc/update-motd.d/* && \
-    rm -f /etc/legal /etc/motd && \
-    touch /home/devuser/.hushlogin /root/.hushlogin
+# --------------------------------------------------
+# Disable default MOTD noise
+# --------------------------------------------------
+RUN rm -rf /etc/update-motd.d/*     && rm -f /etc/legal     && rm -f /etc/motd     && touch /home/devuser/.hushlogin     && touch /root/.hushlogin
 
-RUN echo "export PS1='\[\e[1;32m\]\u@phoenix\[\e[0m\]:\[\e[1;36m\]\w\[\e[0m\]\$ '" >> /home/devuser/.bashrc && \
-    echo "export PS1='\[\e[1;31m\]\u@phoenix\[\e[0m\]:\[\e[1;36m\]\w\[\e[0m\]# '" >> /root/.bashrc
+# --------------------------------------------------
+# Prompt styling
+# --------------------------------------------------
+RUN echo "export PS1='\[\e[1;32m\]\u@phoenix\[\e[0m\]:\[\e[1;36m\]\w\[\e[0m\]\$ '" >> /home/devuser/.bashrc     && echo "export PS1='\[\e[1;31m\]\u@phoenix\[\e[0m\]:\[\e[1;36m\]\w\[\e[0m\]# '" >> /root/.bashrc
 
-RUN cat > /tmp/setup.sh <<'EOF'
+# --------------------------------------------------
+# Main shell setup
+# --------------------------------------------------
+RUN mkdir -p /tmp/.phoenix_state && chmod 1777 /tmp/.phoenix_state     && cat > /tmp/setup.sh <<'EOF'
 # ==========================================
-# 🚀 SYSTEM ALIASES
+# 🚀 PHOENIX TERMINAL TOOLKIT v2
 # ==========================================
 
+# ------------------------------------------
+# Global tuning & paths
+# ------------------------------------------
+export PHOENIX_STATE_DIR="${PHOENIX_STATE_DIR:-/tmp/.phoenix_state}"
+export PHOENIX_REPORT_DIR="${PHOENIX_REPORT_DIR:-$HOME/phoenix-reports}"
+export PHOENIX_CPU_HISTORY_FILE="${PHOENIX_CPU_HISTORY_FILE:-/tmp/.phoenix_cpu_history}"
+export PHOENIX_CPU_SAMPLE_SECONDS="${PHOENIX_CPU_SAMPLE_SECONDS:-2}"
+export PHOENIX_MM_CPU_SAMPLE_SECONDS="${PHOENIX_MM_CPU_SAMPLE_SECONDS:-2}"
+export PHOENIX_CDISK_CACHE_SECONDS="${PHOENIX_CDISK_CACHE_SECONDS:-60}"
+
+# ------------------------------------------
+# Basic aliases
+# ------------------------------------------
 alias c='clear'
 alias ..='cd ..'
 alias ...='cd ../..'
@@ -70,38 +80,30 @@ alias tree='tree -C'
 alias f='find . -name'
 alias grep='grep --color=auto'
 alias h='history'
-alias findbig='find . -type f -size +50M -exec ls -lh {} + 2>/dev/null | awk "{ print \$9 \": \" \$5 }"'
-
-alias dsize='du -h --max-depth=1 | sort -hr'
+alias dsize='du -h --max-depth=1 2>/dev/null | sort -hr'
 alias chmodx='chmod +x'
 alias chownme='sudo chown -R $USER:$USER .'
 alias path='echo -e ${PATH//:/\\n}'
-
 alias up='sudo apt-get update && sudo apt-get upgrade -y'
-alias clean='sudo apt-get autoremove -y && sudo apt-get clean && reclaimram'
+alias clean='sudo apt-get autoremove -y && sudo apt-get clean && reclaimram && diskclean'
 alias mem='ram'
 alias hostmem='free -h'
 alias cpu='cpuuse'
 alias cpu5='cpuuse 5'
 alias df='df -h'
 alias top='htop'
-alias ports='sudo netstat -tulpn'
-alias logs='sudo tail -f /var/log/syslog 2>/dev/null || echo "No /var/log/syslog here."'
+alias logs='sudo tail -f /var/log/syslog'
 alias rst='source ~/.bashrc && echo -e "\e[1;32m✔ Terminal Reloaded!\e[0m"'
-
 alias sysinfo='cat /etc/os-release'
 alias cpuinfo='lscpu'
 alias myports='ss -tuln'
 alias histg='history | grep'
-
 alias myip='echo -e "\n\e[1;36m🌐 IP Details:\e[0m"; curl -s ipinfo.io; echo'
 alias speed='echo -e "\e[1;33m⌛ Testing Speed...\e[0m"; speedtest-cli --simple'
 alias ping='ping -c 4'
 alias ts='sudo tailscale status'
-
 alias pinger='ping -c 4 8.8.8.8'
 alias serve='python3 -m http.server 8000'
-
 alias gs='git status'
 alias ga='git add .'
 alias gc='git commit -m'
@@ -110,24 +112,21 @@ alias gl='git log --oneline --graph -n 10'
 alias get='wget -c'
 alias api='curl -s'
 alias weather='curl -s wttr.in/Dhaka?0'
+alias ports='netports'
+alias disk='cdisk'
+alias netx='net'
+alias findbig='find . -type f -size +50M -exec ls -lh {} + 2>/dev/null | awk "{ print \$9 \": \" \$5 }"'
 
+# Python env shortcuts
 alias mkv='python3 -m venv .venv && echo -e "\e[1;32m✔ .venv created successfully!\e[0m"'
 alias onv='source .venv/bin/activate 2>/dev/null || echo -e "\e[1;31m✘ .venv not found! Run mkv first.\e[0m"'
 alias offv='deactivate 2>/dev/null || echo -e "\e[1;33mℹ No active virtual environment to deactivate.\e[0m"'
 
-alias apps='echo -e "\n\e[1;36m▶ Codex / Node / Python Apps:\e[0m"; ps -eo pid,user,%cpu,%mem,command | grep -E "[c]odex|[n]ode|[p]ython" || echo -e "\e[90mNone\e[0m"'
-alias kn='sudo pkill -f node 2>/dev/null; echo -e "\e[1;32m✔ All Node apps stopped.\e[0m"'
-alias kp='sudo pkill -f python 2>/dev/null; echo -e "\e[1;32m✔ All Python apps stopped.\e[0m"'
-alias kcodex='sudo pkill -f codex 2>/dev/null; echo -e "\e[1;32m✔ All Codex processes stopped.\e[0m"'
-
-# ==========================================
-# 🛠 CUSTOM SHORTCUT MANAGER
-# ==========================================
-
+# ------------------------------------------
+# Custom shortcuts
+# ------------------------------------------
 CUSTOM_ALIAS_FILE="$HOME/.my_shortcuts"
-if [ -f "$CUSTOM_ALIAS_FILE" ]; then
-    source "$CUSTOM_ALIAS_FILE"
-fi
+[ -f "$CUSTOM_ALIAS_FILE" ] && source "$CUSTOM_ALIAS_FILE"
 
 function addcmd() {
     echo -e "\n\e[1;36m➕ Create a New Shortcut\e[0m"
@@ -136,7 +135,7 @@ function addcmd() {
     [ -z "$S_NAME" ] && { echo -e "\e[1;31m✘ Cancelled. Name cannot be empty.\e[0m"; return 1; }
 
     if grep -q "alias $S_NAME=" "$CUSTOM_ALIAS_FILE" 2>/dev/null; then
-        echo -e "\e[1;33mℹ Shortcut '$S_NAME' already exists!\e[0m"
+        echo -e "\e[1;33mℹ Shortcut '$S_NAME' already exists! Please choose another name.\e[0m"
         return 1
     fi
 
@@ -145,7 +144,7 @@ function addcmd() {
 
     echo "alias $S_NAME='$S_CMD'" >> "$CUSTOM_ALIAS_FILE"
     eval "alias $S_NAME='$S_CMD'"
-    echo -e "\e[1;32m✔ Shortcut '$S_NAME' created!\e[0m\n"
+    echo -e "\e[1;32m✔ Shortcut '$S_NAME' has been created and is ready to use!\e[0m\n"
 }
 
 function delcmd() {
@@ -155,52 +154,91 @@ function delcmd() {
     [ -z "$S_NAME" ] && { echo -e "\e[1;31m✘ Cancelled. Name cannot be empty.\e[0m"; return 1; }
 
     if ! grep -q "alias $S_NAME=" "$CUSTOM_ALIAS_FILE" 2>/dev/null; then
-        echo -e "\e[1;33mℹ Shortcut '$S_NAME' not found!\e[0m"
+        echo -e "\e[1;33mℹ Shortcut '$S_NAME' not found in your custom list!\e[0m"
         return 1
     fi
 
     sed -i "/alias $S_NAME=/d" "$CUSTOM_ALIAS_FILE"
     unalias "$S_NAME" 2>/dev/null
-    echo -e "\e[1;32m✔ Shortcut '$S_NAME' deleted!\e[0m\n"
+    echo -e "\e[1;32m✔ Shortcut '$S_NAME' has been successfully deleted!\e[0m\n"
 }
 
-# ==========================================
-# 🧰 COMMON HELPERS
-# ==========================================
-
+# ------------------------------------------
+# Shared helpers
+# ------------------------------------------
 function _state_dir() {
-    local d="/var/tmp/phoenix-state"
-    mkdir -p "$d" 2>/dev/null || {
-        d="$HOME/.phoenix-state"
-        mkdir -p "$d" 2>/dev/null
-    }
-    echo "$d"
+  local d="${PHOENIX_STATE_DIR:-/tmp/.phoenix_state}"
+  mkdir -p "$d" 2>/dev/null || true
+  chmod 1777 "$d" 2>/dev/null || true
+  echo "$d"
 }
 
-function _cache_get() {
-    local name="$1" ttl="${2:-300}" f ts val now
-    f="$(_state_dir)/$name"
-    [ -f "$f" ] || return 1
-    IFS='|' read -r ts val < "$f" || return 1
-    now=$(date +%s)
-    [ -n "$ts" ] || return 1
-    [ $((now - ts)) -le "$ttl" ] || return 1
-    echo "$val"
-}
-
-function _cache_put() {
-    local name="$1" val="$2" f
-    f="$(_state_dir)/$name"
-    printf '%s|%s\n' "$(date +%s)" "$val" > "$f"
+function _report_dir() {
+  local d="${PHOENIX_REPORT_DIR:-$HOME/phoenix-reports}"
+  mkdir -p "$d" 2>/dev/null || true
+  echo "$d"
 }
 
 function _b2h() {
   awk -v b="${1:-0}" 'BEGIN{
-    split("B KB MB GB TB",u," ");
+    split("B KB MB GB TB PB",u," ");
     i=1;
-    while (b>=1024 && i<5) { b/=1024; i++ }
+    while (b>=1024 && i<6) { b/=1024; i++ }
     printf "%.1f %s", b, u[i]
   }'
+}
+
+function _is_int() {
+  [[ "${1:-}" =~ ^[0-9]+$ ]]
+}
+
+function _safe_cat() {
+  [ -r "$1" ] && cat "$1" 2>/dev/null || echo ""
+}
+
+function _num_or_zero() {
+  local v="${1:-0}"
+  if [[ "$v" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    echo "$v"
+  else
+    echo 0
+  fi
+}
+
+function _pct() {
+  awk -v a="${1:-0}" -v b="${2:-0}" 'BEGIN{ if (b>0) printf "%.1f", (a/b)*100; else print "0.0" }'
+}
+
+function _limit_is_real() {
+  local v="${1:-0}"
+  [[ "$v" =~ ^[0-9]+$ ]] || return 1
+  [ "$v" -gt 0 ] || return 1
+  [ "$v" -lt 1152921504606846976 ]
+}
+
+function _secs_human() {
+  local s="${1:-0}" d h m
+  _is_int "$s" || s=0
+  d=$((s / 86400))
+  h=$(((s % 86400) / 3600))
+  m=$(((s % 3600) / 60))
+  if [ "$d" -gt 0 ]; then
+    printf "%s days, %s hours, %s mins" "$d" "$h" "$m"
+  elif [ "$h" -gt 0 ]; then
+    printf "%s hours, %s mins" "$h" "$m"
+  else
+    printf "%s mins" "$m"
+  fi
+}
+
+function _strip_ansi() {
+  sed -r 's/\x1B\[[0-9;]*[A-Za-z]//g'
+}
+
+function _print_row() {
+  local icon="$1" label="$2" a="$3" b="$4" c="$5"
+  local C_C="\e[36m" C_G="\e[90m" C_W="\e[1;37m" C_R="\e[0m"
+  echo -e " ${icon}   ${C_W}$(printf "%-10s" "$label")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-18s" "$a")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-18s" "$b")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-18s" "$c")${C_R}"
 }
 
 function mkcd() { mkdir -p "$1" && cd "$1"; }
@@ -211,7 +249,8 @@ function kport() {
         echo -e "\e[1;31m✘ Usage: kport <port>\e[0m"
         return 1
     fi
-    PID=$(sudo lsof -t -i:$1 2>/dev/null)
+    local PID
+    PID=$(sudo lsof -t -i:"$1" 2>/dev/null)
     if [ -z "$PID" ]; then
         echo -e "\e[1;33mℹ Port $1 is free\e[0m"
     else
@@ -241,10 +280,14 @@ function ex() {
     fi
 }
 
-# ==========================================
-# 🧠 ENV / VENV / CODEX / INSTALLERS
-# ==========================================
+function procfind() {
+  [ -z "$1" ] && { echo -e "\e[1;31m✘ Usage: procfind <keyword>\e[0m"; return 1; }
+  ps -ef | grep -i -- "$1" | grep -v grep
+}
 
+# ------------------------------------------
+# DEV helpers
+# ------------------------------------------
 function sv() {
     if [ -f "venv/bin/activate" ]; then
         source venv/bin/activate
@@ -256,7 +299,7 @@ function sv() {
         source env/bin/activate
         echo -e "\e[1;32m✔ env activated!\e[0m"
     else
-        echo -e "\e[1;31m✘ No virtual environment found!\e[0m"
+        echo -e "\e[1;31m✘ No virtual environment (venv, .venv, env) found in this directory!\e[0m"
         echo -e "\e[1;33mℹ Run 'mkv' to create one.\e[0m"
     fi
 }
@@ -269,9 +312,9 @@ function dcodex() {
         echo -e "\e[1;36mCodex Version:\e[0m $(codex --version 2>/dev/null || echo installed)"
         echo -e "\e[1;36mNode Version:\e[0m $(node -v 2>/dev/null || echo missing)"
         echo -e "\e[1;36mNPM Version:\e[0m $(npm -v 2>/dev/null || echo missing)"
-        echo -e "\e[1;33mℹ Run 'codex' manually when needed.\e[0m"
+        echo -e "\e[1;33mℹ Run 'codex' manually when you want to start it.\e[0m"
     else
-        echo -e "\e[1;31m✘ Codex not found. Rebuild image.\e[0m"
+        echo -e "\e[1;31m✘ Codex not found. Rebuild the image.\e[0m"
         return 1
     fi
     echo
@@ -281,7 +324,7 @@ function dpy() {
     echo -e "\n\e[1;36m🐍 Python Environment Status\e[0m"
     echo -e "\e[90m----------------------------------------\e[0m"
 
-    NEED_PKGS=""
+    local NEED_PKGS=""
     command -v pip3 >/dev/null 2>&1 || NEED_PKGS="$NEED_PKGS python3-pip"
     python3 -m venv --help >/dev/null 2>&1 || NEED_PKGS="$NEED_PKGS python3-venv"
 
@@ -292,7 +335,7 @@ function dpy() {
         return 0
     fi
 
-    echo -e "\e[1;33m⚠ Missing packages detected. Runtime install can increase file cache.\e[0m"
+    echo -e "\e[1;33m⚠ Missing packages detected. Runtime install can raise file cache and RAM graph.\e[0m"
     sudo apt-get update
     sudo apt-get install -y --no-install-recommends $NEED_PKGS
     sudo apt-get clean
@@ -307,7 +350,7 @@ function dpy() {
 
 function dgo() {
     echo -e "\n\e[1;36m🐹 Installing Golang...\e[0m"
-    echo -e "\e[1;33m⚠ Runtime install can increase file cache.\e[0m"
+    echo -e "\e[1;33m⚠ Runtime install can raise file cache and RAM graph.\e[0m"
     sudo apt-get update && sudo apt-get install -y --no-install-recommends golang
     sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
     sync
@@ -317,7 +360,7 @@ function dgo() {
 
 function djava() {
     echo -e "\n\e[1;36m☕ Installing Java 17 LTS...\e[0m"
-    echo -e "\e[1;33m⚠ Runtime install can increase file cache.\e[0m"
+    echo -e "\e[1;33m⚠ Runtime install can raise file cache and RAM graph.\e[0m"
     sudo apt-get update && sudo apt-get install -y --no-install-recommends openjdk-17-jdk openjdk-17-jre
     sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
     sync
@@ -325,10 +368,34 @@ function djava() {
     java -version
 }
 
-# ==========================================
-# 🧠 MEMORY / RAM
-# ==========================================
+# ------------------------------------------
+# App management
+# ------------------------------------------
+function apps() {
+  echo -e "\n\e[1;36m▶ Codex / Node / Python Apps\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────\e[0m"
+  ps -eo pid,user,%cpu,%mem,etime,command | grep -E '[c]odex|[n]ode|[p]ython' || echo -e "\e[90mNone\e[0m"
+  echo
+}
 
+function kn() {
+  sudo pkill -f node 2>/dev/null
+  echo -e "\e[1;32m✔ All Node apps stopped.\e[0m"
+}
+
+function kp() {
+  sudo pkill -f python 2>/dev/null
+  echo -e "\e[1;32m✔ All Python apps stopped.\e[0m"
+}
+
+function kcodex() {
+  sudo pkill -f codex 2>/dev/null
+  echo -e "\e[1;32m✔ All Codex processes stopped.\e[0m"
+}
+
+# ------------------------------------------
+# Memory helpers
+# ------------------------------------------
 function _mem_mode() {
   if [ -f /sys/fs/cgroup/memory.current ]; then
     echo "v2"
@@ -377,85 +444,10 @@ function _cg_stat() {
   awk -v k="$alt" '$1==k {print $2}' "$base/memory.stat" 2>/dev/null | head -n 1
 }
 
-function ramtop() {
-  echo -e "\n\e[1;36m📋 Top Processes by RSS\e[0m"
-  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-  printf "  %-7s │ %-8s │ %-6s │ %-10s │ %s\n" "PID" "USER" "MEM%" "USED" "COMMAND"
-  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-  ps -eo pid=,user=,%mem=,rss=,comm= --sort=-rss | head -n 15 | while read -r pid user mem rss comm; do
-    printf "  %-7s │ %-8.8s │ %-6s │ %-10s │ %s\n" "$pid" "$user" "${mem}%" "$(_b2h "$((rss * 1024))")" "$comm"
-  done
-  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-function ramwhy() {
-  local base used limit anon file shmem slab pgt kstack sock rss codex_proc node_proc py_proc
+function _mem_summary() {
+  local base used limit anon file shmem slab slab_reclaimable pgt kstack sock rss reclaimable
   base="$(_cg_base)"
-  [ -z "$base" ] && { echo "cgroup memory info not found"; return 1; }
-
-  if [ -f "$base/memory.current" ]; then
-    used=$(_cg_read "$base/memory.current")
-    limit=$(_cg_read "$base/memory.max")
-  else
-    used=$(_cg_read "$base/memory.usage_in_bytes")
-    limit=$(_cg_read "$base/memory.limit_in_bytes")
-  fi
-
-  anon=${_CG_ANON:-$(_cg_stat anon)}; [ -z "$anon" ] && anon=0
-  file=${_CG_FILE:-$(_cg_stat file)}; [ -z "$file" ] && file=0
-  shmem=${_CG_SHMEM:-$(_cg_stat shmem)}; [ -z "$shmem" ] && shmem=0
-  slab=${_CG_SLAB:-$(_cg_stat slab)}; [ -z "$slab" ] && slab=0
-  pgt=${_CG_PGT:-$(_cg_stat pagetables)}; [ -z "$pgt" ] && pgt=0
-  kstack=${_CG_KSTACK:-$(_cg_stat kernel_stack)}; [ -z "$kstack" ] && kstack=0
-  sock=${_CG_SOCK:-$(_cg_stat sock)}; [ -z "$sock" ] && sock=0
-  rss=$(ps -eo rss= 2>/dev/null | awk '{s+=$1} END {print s*1024}')
-  [ -z "$rss" ] && rss=0
-
-  codex_proc=$(pgrep -af '(^|/)(codex)( |$)|@openai/codex' 2>/dev/null | head -n 3)
-  node_proc=$(ps -eo pid=,rss=,comm=,args= --sort=-rss | grep -E '[n]ode|[n]pm' | head -n 5)
-  py_proc=$(ps -eo pid=,rss=,comm=,args= --sort=-rss | grep -E '[p]ython' | head -n 5)
-
-  echo -e "\n\e[1;35m🔎 RAM Diagnosis\e[0m"
-  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-
-  if [ "$file" -gt "$anon" ] && [ "$file" -gt $((150*1024*1024)) ]; then
-    echo -e "\e[1;33mMain Cause:\e[0m File/Page cache is dominating memory."
-    echo -e "This usually happens after installs, archive extraction, or heavy file reads."
-  elif [ "$anon" -gt $((200*1024*1024)) ]; then
-    echo -e "\e[1;33mMain Cause:\e[0m Real process/application memory is high (anon memory)."
-    echo -e "That means one or more running processes are actually holding RAM."
-  else
-    echo -e "\e[1;33mMain Cause:\e[0m Mixed usage."
-    echo -e "Some RAM is real process memory, some is kernel/cache overhead."
-  fi
-
-  if [ -n "$codex_proc" ]; then
-    echo -e "\n\e[1;31m⚠ Codex appears to be running:\e[0m"
-    echo "$codex_proc"
-  fi
-
-  if [ -n "$node_proc" ]; then
-    echo -e "\n\e[1;36mNode/NPM related processes:\e[0m"
-    echo "$node_proc"
-  fi
-
-  if [ -n "$py_proc" ]; then
-    echo -e "\n\e[1;36mPython related processes:\e[0m"
-    echo "$py_proc"
-  fi
-
-  echo -e "\n\e[1;32mWhat to do now:\e[0m"
-  echo -e "  1) Run \e[1;36mram\e[0m and check File Cache vs Anon Memory"
-  echo -e "  2) Run \e[1;36mcachefiles\e[0m to see cache folders"
-  echo -e "  3) If File Cache is high, run \e[1;36mreclaimram\e[0m"
-  echo -e "  4) If Anon/Process memory is high, run \e[1;36mramtop\e[0m"
-  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-function ram() {
-  local base used limit anon file shmem slab slab_reclaimable pgt kstack sock rss free limit_txt free_txt used_pct reclaimable
-  base="$(_cg_base)"
-  [ -z "$base" ] && { echo "cgroup memory info not found"; return 1; }
+  [ -z "$base" ] && { echo "0|0|0|0|0|0|0|0|0|0|0"; return; }
 
   if [ -f "$base/memory.current" ]; then
     used=$(_cg_read "$base/memory.current")
@@ -475,105 +467,17 @@ function ram() {
   sock=$(_cg_stat sock); [ -z "$sock" ] && sock=0
   rss=$(ps -eo rss= 2>/dev/null | awk '{s+=$1} END {print s*1024}')
   [ -z "$rss" ] && rss=0
+  if [ "$anon" -eq 0 ] && [ "$file" -eq 0 ] && [ "$rss" -gt 0 ]; then
+    anon=$rss
+  fi
   reclaimable=$((file + slab_reclaimable))
 
-  export _CG_ANON="$anon" _CG_FILE="$file" _CG_SHMEM="$shmem" _CG_SLAB="$slab" _CG_SLAB_REC="$slab_reclaimable" _CG_PGT="$pgt" _CG_KSTACK="$kstack" _CG_SOCK="$sock"
-
-  if [[ "$limit" =~ ^[0-9]+$ ]] && [ "$limit" -gt 0 ]; then
-    free=$((limit - used))
-    [ "$free" -lt 0 ] && free=0
-    limit_txt="$(_b2h "$limit")"
-    free_txt="$(_b2h "$free")"
-    used_pct=$(awk -v u="$used" -v l="$limit" 'BEGIN { if (l>0) printf "%.1f%%", (u/l)*100; else print "-" }')
-  else
-    limit_txt="unlimited"
-    free_txt="-"
-    used_pct="-"
-  fi
-
-  echo -e "\n\e[1;36m📊 RAM (Container Accurate)\e[0m"
-  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-  printf "  %-20s : %s\n" "Cgroup Total" "$(_b2h "$used")"
-  printf "  %-20s : %s\n" "Memory Limit" "$limit_txt"
-  printf "  %-20s : %s\n" "Free to Limit" "$free_txt"
-  printf "  %-20s : %s\n" "Usage Percent" "$used_pct"
-  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-  printf "  %-20s : %s\n" "Process RSS Sum" "$(_b2h "$rss")"
-  printf "  %-20s : %s\n" "Anon Memory" "$(_b2h "$anon")"
-  printf "  %-20s : %s\n" "File Cache" "$(_b2h "$file")"
-  printf "  %-20s : %s\n" "Slab" "$(_b2h "$slab")"
-  printf "  %-20s : %s\n" "Slab Reclaimable" "$(_b2h "$slab_reclaimable")"
-  printf "  %-20s : %s\n" "Likely Reclaimable" "$(_b2h "$reclaimable")"
-  printf "  %-20s : %s\n" "Shared Memory" "$(_b2h "$shmem")"
-  printf "  %-20s : %s\n" "Page Tables" "$(_b2h "$pgt")"
-  printf "  %-20s : %s\n" "Kernel Stack" "$(_b2h "$kstack")"
-  printf "  %-20s : %s\n" "Socket Buffers" "$(_b2h "$sock")"
-  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-
-  if [ "$file" -gt "$anon" ] && [ "$file" -gt $((150*1024*1024)) ]; then
-    echo -e "\e[1;33mHint:\e[0m Most RAM is in file/page cache, not in active apps."
-  elif [ "$anon" -gt $((200*1024*1024)) ]; then
-    echo -e "\e[1;33mHint:\e[0m Active processes are the main RAM users right now."
-  else
-    echo -e "\e[1;33mHint:\e[0m RAM usage is mixed between processes and cache."
-  fi
-
-  echo -e "\n\e[1;36mRun these:\e[0m \e[1;32mramtop\e[0m | \e[1;32mramwhy\e[0m | \e[1;32mcachefiles\e[0m | \e[1;32mreclaimram\e[0m\n"
+  echo "$used|$limit|$anon|$file|$shmem|$slab|$slab_reclaimable|$pgt|$kstack|$sock|$rss|$reclaimable"
 }
 
-function cachefiles() {
-  echo -e "\n\e[1;36m🗂 Common Cache Directories\e[0m"
-  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-  du -sh \
-    /var/cache/apt \
-    /var/lib/apt/lists \
-    "$HOME/.cache" \
-    "$HOME/.cache/pip" \
-    "$HOME/.cache/npm" \
-    "$HOME/.cache/node-gyp" \
-    "$HOME/.npm" \
-    /tmp/.npm-cache \
-    /var/tmp \
-    2>/dev/null | sort -hr
-  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-function reclaimram() {
-  echo -e "\n\e[1;33m🧹 Cleaning package/cache files...\e[0m"
-
-  npm cache clean --force >/dev/null 2>&1 || true
-  python3 -m pip cache purge >/dev/null 2>&1 || true
-  sudo apt-get clean >/dev/null 2>&1 || true
-
-  rm -rf \
-    "$HOME/.npm" \
-    "$HOME/.cache/npm" \
-    "$HOME/.cache/node-gyp" \
-    "$HOME/.cache/pip" \
-    /tmp/.npm-cache \
-    /tmp/pip-* \
-    /tmp/pip-build-* \
-    /tmp/pip-install-* \
-    /var/tmp/* \
-    2>/dev/null || true
-
-  sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/cache/apt/*.bin 2>/dev/null || true
-  sync
-
-  if sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null; then
-    echo -e "\e[1;32m✔ Linux page cache dropped.\e[0m"
-  else
-    echo -e "\e[1;33mℹ Cache files removed, but kernel page cache drop is not allowed here.\e[0m"
-    echo -e "\e[1;33mℹ If file cache stays high, restart/redeploy the container.\e[0m"
-  fi
-
-  ram
-}
-
-# ==========================================
-# ⚙ CPU
-# ==========================================
-
+# ------------------------------------------
+# CPU helpers
+# ------------------------------------------
 function _cpu_mode() {
   if [ -f /sys/fs/cgroup/cpu.stat ]; then
     echo "v2"
@@ -663,16 +567,15 @@ function _cpu_pressure_avg() {
 }
 
 function _cpu_history_file() {
-  echo "${PHOENIX_CPU_HISTORY_FILE:-$(_state_dir)/cpu_history.log}"
+  echo "${PHOENIX_CPU_HISTORY_FILE:-/tmp/.phoenix_cpu_history}"
 }
 
 function _cpu_record_history() {
   local used="$1" limit="$2" pct="$3" file tmp
   file="$(_cpu_history_file)"
   tmp="${file}.tmp"
-  mkdir -p "$(dirname "$file")" 2>/dev/null || true
   printf '%s|%s|%s|%s\n' "$(date +%s)" "$used" "$limit" "$pct" >> "$file"
-  tail -n 180 "$file" > "$tmp" 2>/dev/null && mv "$tmp" "$file"
+  tail -n 120 "$file" > "$tmp" 2>/dev/null && mv "$tmp" "$file"
 }
 
 function _cpu_avg_history() {
@@ -708,6 +611,441 @@ function _cpu_measure() {
   echo "$used|$limit|$pct|$((thr2-thr1))|$thr_pct|$((n2-n1))|$psi_some|$psi_full|$secs"
 }
 
+# ------------------------------------------
+# Disk helpers
+# ------------------------------------------
+function _container_visible_bytes() {
+  local dirs=() d
+  for d in /bin /boot /etc /home /lib /lib64 /opt /root /sbin /srv /tmp /usr /var /app /workspace; do
+    [ -e "$d" ] && dirs+=("$d")
+  done
+  [ "${#dirs[@]}" -eq 0 ] && { echo 0; return; }
+  du -sb "${dirs[@]}" 2>/dev/null | awk '{s+=$1} END{print s+0}'
+}
+
+function _container_writable_bytes() {
+  local dirs=() d
+  for d in /home /root /var /tmp /opt /srv /app /workspace; do
+    [ -e "$d" ] && dirs+=("$d")
+  done
+  [ "${#dirs[@]}" -eq 0 ] && { echo 0; return; }
+  du -sb "${dirs[@]}" 2>/dev/null | awk '{s+=$1} END{print s+0}'
+}
+
+function _cdisk_cache_file() {
+  echo "$(_state_dir)/cdisk.cache"
+}
+
+function _cdisk_collect() {
+  local visible writable total used free iused ifree ipct cache
+  visible=$(_container_visible_bytes)
+  writable=$(_container_writable_bytes)
+  read -r total used free < <(df -B1 / 2>/dev/null | awk 'NR==2 {print $2, $3, $4}')
+  read -r iused ifree ipct < <(df -Pi / 2>/dev/null | awk 'NR==2 {print $3, $4, $5}')
+  cache="$(_cdisk_cache_file)"
+  printf '%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$(date +%s)" "${visible:-0}" "${writable:-0}" "${total:-0}" "${used:-0}" "${free:-0}" "${iused:-0}" "${ifree:-0}" "${ipct:-0%}" > "$cache"
+}
+
+function _cdisk_read() {
+  local ttl="${1:-${PHOENIX_CDISK_CACHE_SECONDS:-60}}" file ts now
+  file="$(_cdisk_cache_file)"
+  now=$(date +%s)
+  if [ -r "$file" ]; then
+    ts=$(awk -F'|' 'NR==1 {print $1}' "$file" 2>/dev/null)
+    if _is_int "$ts" && [ $((now - ts)) -le "$ttl" ] 2>/dev/null; then
+      cat "$file"
+      return
+    fi
+  fi
+  _cdisk_collect
+  cat "$file"
+}
+
+function inode() {
+  echo -e "\n\e[1;36m🧬 Inode Usage\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────\e[0m"
+  df -Pi /
+  echo
+}
+
+function cdisk() {
+  local data ts visible writable total used free iused ifree ipct fspct
+  data="$(_cdisk_read 5)"
+  IFS='|' read -r ts visible writable total used free iused ifree ipct <<< "$data"
+  fspct=$(_pct "$used" "$total")
+
+  echo -e "\n\e[1;36m💽 C DISK (Container Focused)\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-24s : %s\n" "Container Visible" "$(_b2h "$visible")"
+  printf "  %-24s : %s\n" "Writable/App Data" "$(_b2h "$writable")"
+  if _limit_is_real "$total"; then
+    printf "  %-24s : %s\n" "Filesystem Total" "$(_b2h "$total")"
+    printf "  %-24s : %s\n" "Filesystem Used" "$(_b2h "$used") (${fspct}%)"
+    printf "  %-24s : %s\n" "Filesystem Free" "$(_b2h "$free")"
+  else
+    printf "  %-24s : %s\n" "Filesystem Total" "shared/unlimited"
+    printf "  %-24s : %s\n" "Filesystem Used" "not fixed by runtime"
+    printf "  %-24s : %s\n" "Filesystem Free" "depends on host/storage"
+  fi
+  printf "  %-24s : %s\n" "Inodes Used" "${iused:-0}"
+  printf "  %-24s : %s\n" "Inodes Free" "${ifree:-0}"
+  printf "  %-24s : %s\n" "Inode Usage" "${ipct:-0%}"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  echo -e "\e[1;33mNote:\e[0m 'Container Visible' = pseudo FS বাদ দিয়ে কন্টেইনারে দৃশ্যমান মোট ডেটা।"
+  echo -e "\e[1;36mMore:\e[0m cdisktop / 15  |  cdisktop /var 15  |  diskhot / 20  |  diskclean\n"
+}
+
+function cdisktop() {
+  local target="${1:-/}" limit="${2:-15}"
+  [ ! -e "$target" ] && { echo -e "\e[1;31m✘ Path not found: $target\e[0m"; return 1; }
+  echo -e "\n\e[1;36m📂 Largest paths in $target\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  du -xhd 1 "$target" 2>/dev/null | sort -hr | head -n "$limit"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function diskhot() {
+  local target="${1:-/}" limit="${2:-20}"
+  [ ! -e "$target" ] && { echo -e "\e[1;31m✘ Path not found: $target\e[0m"; return 1; }
+  echo -e "\n\e[1;36m🔥 Largest files in $target\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  find "$target" -xdev -type f -printf '%s\t%p\n' 2>/dev/null | sort -nr | head -n "$limit" | while IFS=$'\t' read -r size path; do
+    printf "  %-10s %s\n" "$(_b2h "$size")" "$path"
+  done
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function diskclean() {
+  local before after
+  before="$(_cdisk_read 0 | awk -F'|' 'NR==1{print $2}')"
+  echo -e "\n\e[1;33m🧹 Cleaning common disk caches...\e[0m"
+  sudo apt-get clean >/dev/null 2>&1 || true
+  npm cache clean --force >/dev/null 2>&1 || true
+  python3 -m pip cache purge >/dev/null 2>&1 || true
+
+  rm -rf "$HOME/.cache/pip" "$HOME/.cache/npm" "$HOME/.cache/node-gyp" "$HOME/.npm" /tmp/.npm-cache 2>/dev/null || true
+  find /tmp -mindepth 1 -maxdepth 1 -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+  find /var/tmp -mindepth 1 -maxdepth 1 -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+  find /var/log -type f -name '*.log' -size +20M -exec truncate -s 0 {} \; 2>/dev/null || true
+  sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/cache/apt/*.bin 2>/dev/null || true
+  sync
+  _cdisk_collect
+  after="$(_cdisk_read 0 | awk -F'|' 'NR==1{print $2}')"
+  echo -e "\e[1;32m✔ Done. Visible disk before: $(_b2h "$before") | after: $(_b2h "$after")\e[0m\n"
+}
+
+# ------------------------------------------
+# Network helpers
+# ------------------------------------------
+function _net_iface_list() {
+  local v
+  v=$(ls /sys/class/net 2>/dev/null | grep -v '^lo$' | paste -sd ',' -)
+  if [ -n "$v" ]; then
+    echo "$v"
+  else
+    ip -o route 2>/dev/null | awk '/ dev / {for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}' | grep -v '^lo$' | sort -u | paste -sd ',' -
+  fi
+}
+
+function _net_primary_iface() {
+  local iface
+  iface=$(ip route 2>/dev/null | awk '/default/ {print $5; exit}')
+  [ -n "$iface" ] && echo "$iface" || echo "unknown"
+}
+
+function _net_raw_totals() {
+  local rx=0 tx=0 rxp=0 txp=0 rxe=0 txe=0 rxd=0 txd=0 count=0 iface base
+  for base in /sys/class/net/*; do
+    [ -e "$base" ] || continue
+    iface=$(basename "$base")
+    [ "$iface" = "lo" ] && continue
+    [ -d "$base/statistics" ] || continue
+    rx=$((rx + $(_safe_cat "$base/statistics/rx_bytes")))
+    tx=$((tx + $(_safe_cat "$base/statistics/tx_bytes")))
+    rxp=$((rxp + $(_safe_cat "$base/statistics/rx_packets")))
+    txp=$((txp + $(_safe_cat "$base/statistics/tx_packets")))
+    rxe=$((rxe + $(_safe_cat "$base/statistics/rx_errors")))
+    txe=$((txe + $(_safe_cat "$base/statistics/tx_errors")))
+    rxd=$((rxd + $(_safe_cat "$base/statistics/rx_dropped")))
+    txd=$((txd + $(_safe_cat "$base/statistics/tx_dropped")))
+    count=$((count + 1))
+  done
+  echo "$rx|$tx|$rxp|$txp|$rxe|$txe|$rxd|$txd|$count"
+}
+
+function _net_state_file() {
+  echo "$(_state_dir)/net_daily.state"
+}
+
+function _net_reset_baseline_internal() {
+  local cur file today
+  cur="$(_net_raw_totals)"
+  file="$(_net_state_file)"
+  today=$(date +%F)
+  printf '%s|%s\n' "$today" "$cur" > "$file"
+}
+
+function _net_ensure_baseline() {
+  local file today saved
+  file="$(_net_state_file)"
+  today=$(date +%F)
+  if [ ! -r "$file" ]; then
+    _net_reset_baseline_internal
+    return
+  fi
+  saved=$(awk -F'|' 'NR==1 {print $1}' "$file" 2>/dev/null)
+  [ "$saved" != "$today" ] && _net_reset_baseline_internal
+}
+
+function _net_today_totals() {
+  local cur day base_rx base_tx base_rxp base_txp base_rxe base_txe base_rxd base_txd
+  local rx tx rxp txp rxe txe rxd txd ifc
+  _net_ensure_baseline
+  cur="$(_net_raw_totals)"
+  IFS='|' read -r rx tx rxp txp rxe txe rxd txd ifc <<< "$cur"
+  IFS='|' read -r day base_rx base_tx base_rxp base_txp base_rxe base_txe base_rxd base_txd < "$(_net_state_file)"
+  echo "$((rx - base_rx))|$((tx - base_tx))|$((rxp - base_rxp))|$((txp - base_txp))|$((rxe - base_rxe))|$((txe - base_txe))|$((rxd - base_rxd))|$((txd - base_txd))"
+}
+
+function _net_conn_counts() {
+  local estab listen timewait udp
+  estab=$(ss -tanH state established 2>/dev/null | wc -l | tr -d ' ')
+  listen=$(ss -tulnH 2>/dev/null | wc -l | tr -d ' ')
+  timewait=$(ss -tanH state time-wait 2>/dev/null | wc -l | tr -d ' ')
+  udp=$(ss -uanH 2>/dev/null | wc -l | tr -d ' ')
+  echo "${estab:-0}|${listen:-0}|${timewait:-0}|${udp:-0}"
+}
+
+function netreset() {
+  _net_reset_baseline_internal
+  echo -e "\e[1;32m✔ Network daily baseline reset for $(date +%F).\e[0m"
+}
+
+function nettoday() {
+  local today iface primary cur conn
+  local drx dtx drxp dtxp drxe dtxe drxd dtxd
+  local rx tx rxp txp rxe txe rxd txd ifcount
+  cur="$(_net_raw_totals)"
+  IFS='|' read -r rx tx rxp txp rxe txe rxd txd ifcount <<< "$cur"
+  today="$(_net_today_totals)"
+  IFS='|' read -r drx dtx drxp dtxp drxe dtxe drxd dtxd <<< "$today"
+  conn="$(_net_conn_counts)"
+  IFS='|' read -r estab listen timewait udp <<< "$conn"
+  iface="$(_net_iface_list)"
+  primary="$(_net_primary_iface)"
+
+  echo -e "\n\e[1;36m🌐 NETWORK TODAY (Container Tracked)\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-24s : %s\n" "Primary Interface" "$primary"
+  printf "  %-24s : %s\n" "Interfaces" "${iface:-none}"
+  printf "  %-24s : %s\n" "Today Download" "$(_b2h "$drx")"
+  printf "  %-24s : %s\n" "Today Upload" "$(_b2h "$dtx")"
+  printf "  %-24s : %s\n" "Today RX Packets" "${drxp:-0}"
+  printf "  %-24s : %s\n" "Today TX Packets" "${dtxp:-0}"
+  printf "  %-24s : %s\n" "Current Total RX" "$(_b2h "$rx")"
+  printf "  %-24s : %s\n" "Current Total TX" "$(_b2h "$tx")"
+  printf "  %-24s : %s\n" "Errors (RX/TX)" "${drxe:-0}/${dtxe:-0}"
+  printf "  %-24s : %s\n" "Dropped (RX/TX)" "${drxd:-0}/${dtxd:-0}"
+  printf "  %-24s : %s\n" "Established Conns" "${estab:-0}"
+  printf "  %-24s : %s\n" "Listening Ports" "${listen:-0}"
+  printf "  %-24s : %s\n" "Time-Wait / UDP" "${timewait:-0} / ${udp:-0}"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  echo -e "\e[1;33mTip:\e[0m live speed = netlive 1 | detailed connections = netconn | open ports = netports\n"
+}
+
+function net() {
+  nettoday
+}
+
+function netlive() {
+  local secs="${1:-1}"
+  local a b arx atx brx btx down up dr du
+  echo -e "\e[1;36mLive network speed monitor. Press Ctrl+C to stop.\e[0m"
+  sleep 1
+  while true; do
+    a="$(_net_raw_totals)"
+    IFS='|' read -r arx atx _ <<< "$a"
+    sleep "$secs"
+    b="$(_net_raw_totals)"
+    IFS='|' read -r brx btx _ <<< "$b"
+    dr=$((brx - arx))
+    du=$((btx - atx))
+    down=$(awk -v x="$dr" -v s="$secs" 'BEGIN{ if(s>0) printf "%.2f", x/s; else print "0" }')
+    up=$(awk -v x="$du" -v s="$secs" 'BEGIN{ if(s>0) printf "%.2f", x/s; else print "0" }')
+    clear
+    echo -e "\n\e[1;36m📶 Live Network Throughput\e[0m"
+    echo -e "\e[90m────────────────────────────────────────────────────────\e[0m"
+    printf "  %-16s : %s/s\n" "Download" "$(_b2h "$down")"
+    printf "  %-16s : %s/s\n" "Upload" "$(_b2h "$up")"
+    printf "  %-16s : %s sec\n" "Window" "$secs"
+    echo -e "\e[90m────────────────────────────────────────────────────────\e[0m"
+  done
+}
+
+function netconn() {
+  echo -e "\n\e[1;36m🔌 Network Connections\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-24s : %s\n" "Established" "$(ss -tanH state established 2>/dev/null | wc -l | tr -d ' ')"
+  printf "  %-24s : %s\n" "Listening" "$(ss -tulnH 2>/dev/null | wc -l | tr -d ' ')"
+  printf "  %-24s : %s\n" "Time-Wait" "$(ss -tanH state time-wait 2>/dev/null | wc -l | tr -d ' ')"
+  printf "  %-24s : %s\n" "UDP Sockets" "$(ss -uanH 2>/dev/null | wc -l | tr -d ' ')"
+  echo -e "\n\e[1;33mTop remote addresses:\e[0m"
+  ss -tpnH state established 2>/dev/null | awk '{print $5}' | sed 's/\[//g; s/\]//g; s/:[0-9]*$//' | sort | uniq -c | sort -nr | head -n 10
+  echo -e "\n\e[1;33mTop listening sockets:\e[0m"
+  ss -tulpen 2>/dev/null | sed -n '1,20p'
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function netports() {
+  echo -e "\n\e[1;36m🚪 Open / Listening Ports\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  ss -tulpen 2>/dev/null || sudo netstat -tulpn
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+# ------------------------------------------
+# RAM tools
+# ------------------------------------------
+function ramtop() {
+  echo -e "\n\e[1;36m📋 Top Processes by RSS\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-7s │ %-8s │ %-6s │ %-10s │ %s\n" "PID" "USER" "MEM%" "USED" "COMMAND"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  ps -eo pid=,user=,%mem=,rss=,comm= --sort=-rss | head -n 15 | while read -r pid user mem rss comm; do
+    printf "  %-7s │ %-8.8s │ %-6s │ %-10s │ %s\n" "$pid" "$user" "${mem}%" "$(_b2h "$((rss * 1024))")" "$comm"
+  done
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function ramwhy() {
+  local m used limit anon file shmem slab pgt kstack sock rss reclaimable codex_proc node_proc py_proc
+  m="$(_mem_summary)"
+  IFS='|' read -r used limit anon file shmem slab slabrec pgt kstack sock rss reclaimable <<< "$m"
+  codex_proc=$(pgrep -af '(^|/)(codex)( |$)|@openai/codex' 2>/dev/null | head -n 3)
+  node_proc=$(ps -eo pid=,rss=,comm=,args= --sort=-rss | grep -E '[n]ode|[n]pm' | head -n 5)
+  py_proc=$(ps -eo pid=,rss=,comm=,args= --sort=-rss | grep -E '[p]ython' | head -n 5)
+
+  echo -e "\n\e[1;35m🔎 RAM Diagnosis\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+
+  if [ "$file" -gt "$anon" ] && [ "$file" -gt $((150*1024*1024)) ]; then
+    echo -e "\e[1;33mMain Cause:\e[0m File/Page cache is dominating memory."
+  elif [ "$anon" -gt $((200*1024*1024)) ]; then
+    echo -e "\e[1;33mMain Cause:\e[0m Real process/application memory is high (anon memory)."
+  else
+    echo -e "\e[1;33mMain Cause:\e[0m Mixed usage."
+  fi
+
+  [ -n "$codex_proc" ] && { echo -e "\n\e[1;31m⚠ Codex appears to be running:\e[0m"; echo "$codex_proc"; }
+  [ -n "$node_proc" ] && { echo -e "\n\e[1;36mNode/NPM processes:\e[0m"; echo "$node_proc"; }
+  [ -n "$py_proc" ] && { echo -e "\n\e[1;36mPython processes:\e[0m"; echo "$py_proc"; }
+
+  echo -e "\n\e[1;32mWhat to do now:\e[0m"
+  echo -e "  1) Run \e[1;36mram\e[0m and check File Cache vs Anon Memory"
+  echo -e "  2) Run \e[1;36mcachefiles\e[0m to see cache folders"
+  echo -e "  3) If File Cache is high, run \e[1;36mreclaimram\e[0m"
+  echo -e "  4) If Anon/Process memory is high, run \e[1;36mramtop\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function ram() {
+  local m used limit anon file shmem slab slab_reclaimable pgt kstack sock rss reclaimable free limit_txt free_txt used_pct
+  m="$(_mem_summary)"
+  IFS='|' read -r used limit anon file shmem slab slab_reclaimable pgt kstack sock rss reclaimable <<< "$m"
+
+  if _limit_is_real "$limit"; then
+    free=$((limit - used))
+    [ "$free" -lt 0 ] && free=0
+    limit_txt="$(_b2h "$limit")"
+    free_txt="$(_b2h "$free")"
+    used_pct="$( _pct "$used" "$limit")%"
+  else
+    limit_txt="shared/unlimited"
+    free_txt="-"
+    used_pct="-"
+  fi
+
+  echo -e "\n\e[1;36m📊 RAM (Container Accurate)\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-20s : %s\n" "Cgroup Total" "$(_b2h "$used")"
+  printf "  %-20s : %s\n" "Memory Limit" "$limit_txt"
+  printf "  %-20s : %s\n" "Free to Limit" "$free_txt"
+  printf "  %-20s : %s\n" "Usage Percent" "$used_pct"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-20s : %s\n" "Process RSS Sum" "$(_b2h "$rss")"
+  printf "  %-20s : %s\n" "Anon Memory" "$(_b2h "$anon")"
+  printf "  %-20s : %s\n" "File Cache" "$(_b2h "$file")"
+  printf "  %-20s : %s\n" "Slab" "$(_b2h "$slab")"
+  printf "  %-20s : %s\n" "Slab Reclaimable" "$(_b2h "$slab_reclaimable")"
+  printf "  %-20s : %s\n" "Likely Reclaimable" "$(_b2h "$reclaimable")"
+  printf "  %-20s : %s\n" "Shared Memory" "$(_b2h "$shmem")"
+  printf "  %-20s : %s\n" "Page Tables" "$(_b2h "$pgt")"
+  printf "  %-20s : %s\n" "Kernel Stack" "$(_b2h "$kstack")"
+  printf "  %-20s : %s\n" "Socket Buffers" "$(_b2h "$sock")"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+
+  if [ "$file" -gt "$anon" ] && [ "$file" -gt $((150*1024*1024)) ]; then
+    echo -e "\e[1;33mHint:\e[0m Most RAM is in file/page cache, not in active apps."
+  elif [ "$anon" -gt $((200*1024*1024)) ]; then
+    echo -e "\e[1;33mHint:\e[0m Active processes are the main RAM users right now."
+  else
+    echo -e "\e[1;33mHint:\e[0m RAM usage is mixed between processes and cache."
+  fi
+
+  echo -e "\n\e[1;36mRun these for details:\e[0m  \e[1;32mramtop\e[0m  |  \e[1;32mramwhy\e[0m  |  \e[1;32mcachefiles\e[0m  |  \e[1;32mreclaimram\e[0m\n"
+}
+
+function cachefiles() {
+  echo -e "\n\e[1;36m🗂 Common Cache Directories\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  du -sh \
+    /var/cache/apt \
+    /var/lib/apt/lists \
+    "$HOME/.cache" \
+    "$HOME/.cache/pip" \
+    "$HOME/.cache/npm" \
+    "$HOME/.cache/node-gyp" \
+    "$HOME/.npm" \
+    /tmp/.npm-cache \
+    /var/tmp \
+    2>/dev/null | sort -hr
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function reclaimram() {
+  echo -e "\n\e[1;33m🧹 Cleaning package/cache files...\e[0m"
+
+  npm cache clean --force >/dev/null 2>&1 || true
+  python3 -m pip cache purge >/dev/null 2>&1 || true
+  sudo apt-get clean >/dev/null 2>&1 || true
+
+  rm -rf \
+    "$HOME/.npm" \
+    "$HOME/.cache/npm" \
+    "$HOME/.cache/node-gyp" \
+    "$HOME/.cache/pip" \
+    /tmp/.npm-cache \
+    /tmp/pip-* \
+    /tmp/pip-build-* \
+    /tmp/pip-install-* \
+    /var/tmp/* \
+    2>/dev/null || true
+
+  sudo rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/* /var/cache/apt/*.bin 2>/dev/null || true
+  sync
+
+  if sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches' 2>/dev/null; then
+    echo -e "\e[1;32m✔ Linux page cache dropped.\e[0m"
+  else
+    echo -e "\e[1;33mℹ Cache files were removed, but this container is not allowed to force-drop kernel page cache.\e[0m"
+  fi
+
+  ram
+}
+
+# ------------------------------------------
+# CPU tools
+# ------------------------------------------
 function cputop() {
   echo -e "\n\e[1;36m📈 Top Processes by CPU\e[0m"
   echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
@@ -741,7 +1079,9 @@ function cpuavg() {
 }
 
 function cpuuse() {
-  local secs="${1:-${PHOENIX_CPU_SAMPLE_SECONDS:-2}}" data used limit pct thr_usec thr_pct thr_n psi_some psi_full sample avg30 limit_label
+  local secs="${1:-${PHOENIX_CPU_SAMPLE_SECONDS:-2}}"
+  local data used limit pct thr_usec thr_pct thr_n psi_some psi_full sample avg30 limit_label
+
   data="$(_cpu_measure "$secs")"
   IFS='|' read -r used limit pct thr_usec thr_pct thr_n psi_some psi_full sample <<< "$data"
   avg30=$(_cpu_avg_history 30 2>/dev/null || true)
@@ -763,7 +1103,7 @@ function cpuuse() {
   printf "  %-20s : %s%%\n" "CPU PSI some avg10" "$psi_some"
   printf "  %-20s : %s%%\n" "CPU PSI full avg10" "$psi_full"
   echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-  echo -e "\e[1;33mTip:\e[0m For a steadier number, run \e[1;36mcpu 5\e[0m or \e[1;36mcpulive 2\e[0m.\n"
+  echo -e "\e[1;33mTip:\e[0m For calmer value, run \e[1;36mcpu 5\e[0m or \e[1;36mcpulive 2\e[0m.\n"
 }
 
 function cpuwhy() {
@@ -777,12 +1117,10 @@ function cpuwhy() {
 
   if [ "$thr_n" -gt 0 ] || awk -v t="$thr_pct" 'BEGIN { exit !(t>0.1) }'; then
     echo -e "\e[1;33mMain Cause:\e[0m CPU throttling happened during the sample."
-    echo -e "The workload wanted more CPU time than the cgroup scheduling allowed."
   elif [ "$pct" != "-" ] && awk -v p="$pct" 'BEGIN { exit !(p>=70) }'; then
     echo -e "\e[1;33mMain Cause:\e[0m Real CPU load is high."
   elif awk -v s="$psi_some" 'BEGIN { exit !(s>=5.0) }'; then
     echo -e "\e[1;33mMain Cause:\e[0m CPU pressure is noticeable."
-    echo -e "Tasks are waiting to run."
   elif [ -n "$avg30" ] && awk -v a="$avg30" -v u="$used" 'BEGIN { exit !(a>0.05 && u<(a/2)) }'; then
     echo -e "\e[1;33mMain Cause:\e[0m Current instant is calmer than recent history."
   else
@@ -792,11 +1130,7 @@ function cpuwhy() {
   echo -e "\n\e[1;36mCurrent Sample:\e[0m"
   echo -e "  Used           : ${used} vCPU"
   echo -e "  Sample Window  : ${sample}s"
-  if [ "$pct" != "-" ]; then
-    echo -e "  Percent Limit  : ${pct}%"
-  else
-    echo -e "  Percent Limit  : shared / not fixed"
-  fi
+  [ "$pct" != "-" ] && echo -e "  Percent Limit  : ${pct}%" || echo -e "  Percent Limit  : shared / not fixed"
   echo -e "  Throttle Events: ${thr_n}"
   echo -e "  Throttle Time  : ${thr_pct}%"
   echo -e "  PSI some avg10 : ${psi_some}%"
@@ -804,10 +1138,10 @@ function cpuwhy() {
   [ -n "$avg30" ] && echo -e "  Local Avg 30s  : ${avg30} vCPU"
 
   echo -e "\n\e[1;32mWhat to do now:\e[0m"
-  echo -e "  1) Run \e[1;36mcpu 5\e[0m"
-  echo -e "  2) Run \e[1;36mcputop\e[0m"
-  echo -e "  3) Run \e[1;36mcpulive 2\e[0m"
-  echo -e "  4) Run \e[1;36mcginfo\e[0m"
+  echo -e "  1) Run \e[1;36mcpu 5\e[0m for a steadier reading"
+  echo -e "  2) Run \e[1;36mcputop\e[0m to catch busy processes"
+  echo -e "  3) Run \e[1;36mcpulive 2\e[0m for a live view"
+  echo -e "  4) Run \e[1;36mcginfo\e[0m to inspect raw cgroup CPU settings"
   echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
 }
 
@@ -832,7 +1166,6 @@ function cginfo() {
   [ -f /sys/fs/cgroup/cpu.max ] && printf "  %-22s : %s\n" "cpu.max" "$(cat /sys/fs/cgroup/cpu.max 2>/dev/null)"
   [ -f /sys/fs/cgroup/cpu.weight ] && printf "  %-22s : %s\n" "cpu.weight" "$(cat /sys/fs/cgroup/cpu.weight 2>/dev/null)"
   [ -f /sys/fs/cgroup/cpuset.cpus.effective ] && printf "  %-22s : %s\n" "cpuset effective" "$(cat /sys/fs/cgroup/cpuset.cpus.effective 2>/dev/null)"
-
   if [ -f /sys/fs/cgroup/cpu.pressure ]; then
     echo -e "  cpu.pressure            :"
     sed 's/^/    /' /sys/fs/cgroup/cpu.pressure 2>/dev/null
@@ -841,397 +1174,245 @@ function cginfo() {
     echo -e "  cpu.stat                :"
     sed 's/^/    /' /sys/fs/cgroup/cpu.stat 2>/dev/null
   fi
-  if [ -f /sys/fs/cgroup/memory.current ]; then
-    printf "  %-22s : %s\n" "memory.current" "$(cat /sys/fs/cgroup/memory.current 2>/dev/null)"
-  fi
-  if [ -f /sys/fs/cgroup/memory.max ]; then
-    printf "  %-22s : %s\n" "memory.max" "$(cat /sys/fs/cgroup/memory.max 2>/dev/null)"
-  fi
-
+  [ -f /sys/fs/cgroup/memory.current ] && printf "  %-22s : %s\n" "memory.current" "$(cat /sys/fs/cgroup/memory.current 2>/dev/null)"
+  [ -f /sys/fs/cgroup/memory.max ] && printf "  %-22s : %s\n" "memory.max" "$(cat /sys/fs/cgroup/memory.max 2>/dev/null)"
   echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
 }
 
-# ==========================================
-# 💾 DISK / C DISK
-# ==========================================
+# ------------------------------------------
+# Health, dashboard, snapshot
+# ------------------------------------------
+function health() {
+  local m used limit anon file shmem slab slabrec pgt kstack sock rss reclaimable
+  local ram_pct ram_state cpu_data cpu_used cpu_limit cpu_pct thr thr_pct thr_n psi_some psi_full sample cpu_state
+  local d ts visible writable total dused dfree iused ifree ipct disk_pct disk_state
+  local conn estab listen tw udp pids
 
-function _cdisk_scan_bytes() {
-    sudo du -x -s --block-size=1 / --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run 2>/dev/null | awk '{print $1}'
+  m="$(_mem_summary)"
+  IFS='|' read -r used limit anon file shmem slab slabrec pgt kstack sock rss reclaimable <<< "$m"
+  ram_pct=$(_pct "$used" "$limit")
+
+  cpu_data="$(_cpu_measure 2)"
+  IFS='|' read -r cpu_used cpu_limit cpu_pct thr thr_pct thr_n psi_some psi_full sample <<< "$cpu_data"
+
+  d="$(_cdisk_read 5)"
+  IFS='|' read -r ts visible writable total dused dfree iused ifree ipct <<< "$d"
+  disk_pct=$(_pct "$dused" "$total")
+
+  conn="$(_net_conn_counts)"
+  IFS='|' read -r estab listen tw udp <<< "$conn"
+  pids=$(ps -e --no-headers 2>/dev/null | wc -l | tr -d ' ')
+
+  if _limit_is_real "$limit" && awk -v v="$ram_pct" 'BEGIN{exit !(v>=90)}'; then ram_state="ALERT"; elif _limit_is_real "$limit" && awk -v v="$ram_pct" 'BEGIN{exit !(v>=75)}'; then ram_state="WARN"; elif _limit_is_real "$limit"; then ram_state="OK"; else ram_state="INFO"; fi
+  if [ "$cpu_pct" != "-" ] && awk -v v="$cpu_pct" 'BEGIN{exit !(v>=90)}'; then cpu_state="ALERT"; elif [ "$cpu_pct" != "-" ] && awk -v v="$cpu_pct" 'BEGIN{exit !(v>=75)}'; then cpu_state="WARN"; else cpu_state="OK"; fi
+  if _limit_is_real "$total" && awk -v v="$disk_pct" 'BEGIN{exit !(v>=90)}'; then disk_state="ALERT"; elif _limit_is_real "$total" && awk -v v="$disk_pct" 'BEGIN{exit !(v>=75)}'; then disk_state="WARN"; else disk_state="INFO"; fi
+
+  echo -e "\n\e[1;36m🩺 System Health\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  if _limit_is_real "$limit"; then
+    printf "  %-16s : %-6s | %s%% of limit\n" "RAM" "$ram_state" "$ram_pct"
+  else
+    printf "  %-16s : %-6s | shared / no fixed cap\n" "RAM" "$ram_state"
+  fi
+  if [ "$cpu_pct" != "-" ]; then
+    printf "  %-16s : %-6s | %s%% of limit\n" "CPU" "$cpu_state" "$cpu_pct"
+  else
+    printf "  %-16s : %-6s | shared / no fixed cap\n" "CPU" "$cpu_state"
+  fi
+  if _limit_is_real "$total"; then
+    printf "  %-16s : %-6s | %s%% of filesystem\n" "DISK" "$disk_state" "$disk_pct"
+  else
+    printf "  %-16s : %-6s | host-managed / no fixed cap\n" "DISK" "$disk_state"
+  fi
+  printf "  %-16s : %-6s | %s listening, %s established\n" "NETWORK" "INFO" "${listen:-0}" "${estab:-0}"
+  printf "  %-16s : %-6s | %s processes running\n" "PIDS" "INFO" "${pids:-0}"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
 }
 
-function _cdisk_bytes() {
-    local mode="${1:-}" ttl="${2:-900}" val
-    if [ "$mode" != "refresh" ]; then
-        val=$(_cache_get cdisk_bytes "$ttl" 2>/dev/null || true)
-        [ -n "$val" ] && { echo "$val"; return; }
-    fi
-    val=$(_cdisk_scan_bytes)
-    [ -z "$val" ] && val=0
-    _cache_put cdisk_bytes "$val"
-    echo "$val"
+function snapshotjson() {
+  local out ts m used limit anon file shmem slab slabrec pgt kstack sock rss reclaimable
+  local cpu_data cpu_used cpu_limit cpu_pct thr thr_pct thr_n psi_some psi_full sample
+  local d cvisible writable total dused dfree iused ifree ipct
+  local cur rx tx rxp txp rxe txe rxd txd ifcount
+  local today drx dtx drxp dtxp drxe dtxe drxd dtxd
+  local conn estab listen tw udp
+
+  ts=$(date +%Y%m%d-%H%M%S)
+  out="$(_report_dir)/phoenix-report-${ts}.json"
+
+  m="$(_mem_summary)"
+  IFS='|' read -r used limit anon file shmem slab slabrec pgt kstack sock rss reclaimable <<< "$m"
+  cpu_data="$(_cpu_measure 1)"
+  IFS='|' read -r cpu_used cpu_limit cpu_pct thr thr_pct thr_n psi_some psi_full sample <<< "$cpu_data"
+  d="$(_cdisk_read 5)"
+  IFS='|' read -r _ cvisible writable total dused dfree iused ifree ipct <<< "$d"
+  cur="$(_net_raw_totals)"
+  IFS='|' read -r rx tx rxp txp rxe txe rxd txd ifcount <<< "$cur"
+  today="$(_net_today_totals)"
+  IFS='|' read -r drx dtx drxp dtxp drxe dtxe drxd dtxd <<< "$today"
+  conn="$(_net_conn_counts)"
+  IFS='|' read -r estab listen tw udp <<< "$conn"
+
+  cat > "$out" <<JSON
+{
+  "timestamp": "$(date --iso-8601=seconds)",
+  "user": "$USER",
+  "home": "$HOME",
+  "memory": {
+    "used_bytes": ${used:-0},
+    "limit_bytes": ${limit:-0},
+    "anon_bytes": ${anon:-0},
+    "file_cache_bytes": ${file:-0},
+    "rss_sum_bytes": ${rss:-0},
+    "reclaimable_bytes": ${reclaimable:-0}
+  },
+  "cpu": {
+    "used_vcpu": ${cpu_used:-0},
+    "limit_vcpu": ${cpu_limit:-0},
+    "percent_of_limit": "${cpu_pct:-0}",
+    "throttle_events": ${thr_n:-0},
+    "throttle_percent": ${thr_pct:-0},
+    "psi_some_avg10": ${psi_some:-0},
+    "psi_full_avg10": ${psi_full:-0}
+  },
+  "disk": {
+    "container_visible_bytes": ${cvisible:-0},
+    "writable_bytes": ${writable:-0},
+    "filesystem_total_bytes": ${total:-0},
+    "filesystem_used_bytes": ${dused:-0},
+    "filesystem_free_bytes": ${dfree:-0},
+    "inode_used": ${iused:-0},
+    "inode_free": ${ifree:-0},
+    "inode_percent": "${ipct:-0%}"
+  },
+  "network": {
+    "interfaces": "$(_net_iface_list)",
+    "primary": "$(_net_primary_iface)",
+    "total_rx_bytes": ${rx:-0},
+    "total_tx_bytes": ${tx:-0},
+    "today_rx_bytes": ${drx:-0},
+    "today_tx_bytes": ${dtx:-0},
+    "today_rx_packets": ${drxp:-0},
+    "today_tx_packets": ${dtxp:-0},
+    "today_rx_errors": ${drxe:-0},
+    "today_tx_errors": ${dtxe:-0},
+    "today_rx_dropped": ${drxd:-0},
+    "today_tx_dropped": ${dtxd:-0},
+    "established": ${estab:-0},
+    "listening": ${listen:-0},
+    "time_wait": ${tw:-0},
+    "udp": ${udp:-0}
+  }
+}
+JSON
+  echo -e "\e[1;32m✔ JSON snapshot saved: $out\e[0m"
 }
 
-function cdisk() {
-    local mode="${1:-}" ttl="${2:-900}" bytes
-    echo -e "\n\e[1;36m💾 C DISK (Container Used Space)\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    if [ "$mode" = "refresh" ]; then
-        echo -e "\e[1;33m⌛ Refreshing full container scan...\e[0m"
-    fi
-    bytes=$(_cdisk_bytes "$mode" "$ttl")
-    printf "  %-22s : %s\n" "Container Used" "$(_b2h "$bytes")"
-    printf "  %-22s : %s\n" "Scope" "All visible files inside container"
-    printf "  %-22s : %s\n" "Excludes" "/proc /sys /dev /run"
-    printf "  %-22s : %s\n" "Refresh" "cdisk refresh"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+function snapshot() {
+  local out ts
+  ts=$(date +%Y%m%d-%H%M%S)
+  out="$(_report_dir)/phoenix-report-${ts}.txt"
+  {
+    echo "PHOENIX REPORT"
+    echo "Generated: $(date)"
+    echo "User: $USER"
+    echo "Home: $HOME"
+    echo
+    mm
+    health
+    ram
+    cpuuse 2
+    cdisk
+    net
+    cputop
+    ramtop
+  } | _strip_ansi > "$out"
+  echo -e "\e[1;32m✔ Text snapshot saved: $out\e[0m"
 }
 
-function cspace() {
-    local path="${1:-/}"
-    echo -e "\n\e[1;36m📦 Biggest Directories under ${path}\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    sudo du -x -h --max-depth=1 "$path" 2>/dev/null | sort -hr | head -n 25
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+function diag() {
+  mm
+  health
+  cpuwhy 3
+  ramwhy
+  cdisk
+  net
+  cachefiles
 }
-
-# ==========================================
-# 🌐 NETWORK
-# ==========================================
-
-function _net_now() {
-    awk 'NR>2 {gsub(":","",$1); if($1!="lo"){rx+=$2; tx+=$10}} END{print (rx+0) "|" (tx+0)}' /proc/net/dev 2>/dev/null
-}
-
-function _net_boot_id() {
-    cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo "unknown"
-}
-
-function _net_state_file() {
-    echo "$(_state_dir)/net_today.state"
-}
-
-function _net_today_values() {
-    local f today boot current rx tx s_date s_boot base_rx base_tx
-    f="$(_net_state_file)"
-    today=$(date +%F)
-    boot=$(_net_boot_id)
-    current=$(_net_now)
-    rx=${current%|*}
-    tx=${current#*|}
-
-    if [ -f "$f" ]; then
-        IFS='|' read -r s_date s_boot base_rx base_tx < "$f"
-    fi
-
-    if [ "$s_date" != "$today" ] || [ "$s_boot" != "$boot" ] || [ -z "$base_rx" ] || [ -z "$base_tx" ]; then
-        printf '%s|%s|%s|%s\n' "$today" "$boot" "$rx" "$tx" > "$f"
-        base_rx="$rx"
-        base_tx="$tx"
-    fi
-
-    echo "$base_rx|$base_tx|$rx|$tx"
-}
-
-function _net_rate_sample() {
-    local secs="${1:-1}" a b rx1 tx1 rx2 tx2
-    a=$(_net_now)
-    rx1=${a%|*}; tx1=${a#*|}
-    sleep "$secs"
-    b=$(_net_now)
-    rx2=${b%|*}; tx2=${b#*|}
-    echo "$(( (rx2-rx1) / secs ))|$(( (tx2-tx1) / secs ))"
-}
-
-function net() {
-    local vals base_rx base_tx cur_rx cur_tx today_rx today_tx total today_total rate rxps txps
-    vals=$(_net_today_values)
-    IFS='|' read -r base_rx base_tx cur_rx cur_tx <<< "$vals"
-    today_rx=$((cur_rx - base_rx)); [ "$today_rx" -lt 0 ] && today_rx=0
-    today_tx=$((cur_tx - base_tx)); [ "$today_tx" -lt 0 ] && today_tx=0
-    total=$((cur_rx + cur_tx))
-    today_total=$((today_rx + today_tx))
-    rate=$(_net_rate_sample 1)
-    rxps=${rate%|*}; txps=${rate#*|}
-
-    echo -e "\n\e[1;36m🌐 Network Overview (Container Local)\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    printf "  %-22s : %s\n" "Today In (RX)" "$(_b2h "$today_rx")"
-    printf "  %-22s : %s\n" "Today Out (TX)" "$(_b2h "$today_tx")"
-    printf "  %-22s : %s\n" "Today Total" "$(_b2h "$today_total")"
-    printf "  %-22s : %s\n" "Since Boot In (RX)" "$(_b2h "$cur_rx")"
-    printf "  %-22s : %s\n" "Since Boot Out (TX)" "$(_b2h "$cur_tx")"
-    printf "  %-22s : %s\n" "Since Boot Total" "$(_b2h "$total")"
-    printf "  %-22s : %s\n" "Live RX rate" "$(_b2h "$rxps")/s"
-    printf "  %-22s : %s\n" "Live TX rate" "$(_b2h "$txps")/s"
-    printf "  %-22s : %s\n" "Note" "Today = since today's first local sample / same boot"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-function netlive() {
-    local secs="${1:-1}" prev cur rx1 tx1 rx2 tx2 rxps txps
-    echo -e "\e[1;36mLive network monitor. Press Ctrl+C to stop.\e[0m"
-    prev=$(_net_now)
-    while true; do
-        sleep "$secs"
-        cur=$(_net_now)
-        rx1=${prev%|*}; tx1=${prev#*|}
-        rx2=${cur%|*};  tx2=${cur#*|}
-        rxps=$(( (rx2-rx1) / secs )); [ "$rxps" -lt 0 ] && rxps=0
-        txps=$(( (tx2-tx1) / secs )); [ "$txps" -lt 0 ] && txps=0
-        clear
-        echo -e "\n\e[1;36m🌐 Live Network\e[0m"
-        echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-        printf "  %-20s : %s\n" "Interval" "${secs}s"
-        printf "  %-20s : %s\n" "RX" "$(_b2h "$rxps")/s"
-        printf "  %-20s : %s\n" "TX" "$(_b2h "$txps")/s"
-        echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-        prev=$cur
-    done
-}
-
-function nettop() {
-    echo -e "\n\e[1;36m🌍 Top Remote Peers / Connections\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    ss -Htun 2>/dev/null | awk '
-    {
-        remote=$5
-        gsub(/^\[/, "", remote)
-        sub(/\]:[0-9]+$/, "", remote)
-        sub(/:[0-9]+$/, "", remote)
-        if(remote!="" && remote!="*" && remote!="0.0.0.0" && remote!="::") cnt[remote]++
-    }
-    END{
-        for(i in cnt) print cnt[i], i
-    }' | sort -nr | head -n 20
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-function netconn() {
-    echo -e "\n\e[1;36m🔌 Connection Summary\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    ss -tan 2>/dev/null | awk 'NR>1 {state[$1]++} END{for(i in state) printf "  %-15s : %s\n", i, state[i]}' | sort
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-# ==========================================
-# 📀 IO / FD / PROCESS SUMMARY
-# ==========================================
-
-function _io_now() {
-    local r=0 w=0
-    if [ -f /sys/fs/cgroup/io.stat ]; then
-        awk '{
-          for(i=1;i<=NF;i++){
-            if($i ~ /^rbytes=/){split($i,a,"="); r+=a[2]}
-            else if($i ~ /^wbytes=/){split($i,a,"="); w+=a[2]}
-          }
-        } END{print (r+0) "|" (w+0)}' /sys/fs/cgroup/io.stat 2>/dev/null
-        return
-    fi
-    if [ -f /sys/fs/cgroup/blkio/blkio.throttle.io_service_bytes ]; then
-        awk '/Read/ {r+=$3} /Write/ {w+=$3} END{print (r+0) "|" (w+0)}' /sys/fs/cgroup/blkio/blkio.throttle.io_service_bytes 2>/dev/null
-        return
-    fi
-    echo "0|0"
-}
-
-function io() {
-    local secs="${1:-2}" a b r1 w1 r2 w2 dr dw
-    a=$(_io_now)
-    r1=${a%|*}; w1=${a#*|}
-    sleep "$secs"
-    b=$(_io_now)
-    r2=${b%|*}; w2=${b#*|}
-    dr=$((r2-r1)); [ "$dr" -lt 0 ] && dr=0
-    dw=$((w2-w1)); [ "$dw" -lt 0 ] && dw=0
-
-    echo -e "\n\e[1;36m📀 IO (cgroup-based)\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    printf "  %-22s : %s\n" "Read Total" "$(_b2h "$r2")"
-    printf "  %-22s : %s\n" "Write Total" "$(_b2h "$w2")"
-    printf "  %-22s : %s\n" "Read Rate" "$(_b2h "$((dr / secs))")/s"
-    printf "  %-22s : %s\n" "Write Rate" "$(_b2h "$((dw / secs))")/s"
-    printf "  %-22s : %s\n" "Window" "${secs}s"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-function iotop() {
-    echo -e "\n\e[1;36m📚 Top Processes by Accumulated IO\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    sudo bash -c '
-    for d in /proc/[0-9]*; do
-        pid=${d##*/}
-        [ -r "$d/io" ] || continue
-        rb=$(awk "/^read_bytes:/ {print \$2}" "$d/io" 2>/dev/null)
-        wb=$(awk "/^write_bytes:/ {print \$2}" "$d/io" 2>/dev/null)
-        [ -z "$rb" ] && rb=0
-        [ -z "$wb" ] && wb=0
-        total=$((rb + wb))
-        [ "$total" -le 0 ] && continue
-        user=$(stat -c %U "$d" 2>/dev/null)
-        comm=$(cat "$d/comm" 2>/dev/null)
-        printf "%s|%s|%s|%s|%s|%s\n" "$total" "$pid" "$user" "$rb" "$wb" "$comm"
-    done
-    ' 2>/dev/null | sort -t'|' -nrk1 | head -n 15 | while IFS='|' read -r total pid user rb wb comm; do
-        printf "  %-7s │ %-8.8s │ %-10s │ %-10s │ %s\n" "$pid" "$user" "$(_b2h "$rb")" "$(_b2h "$wb")" "$comm"
-    done
-    echo -e "\n  Columns: PID │ USER │ READ │ WRITE │ COMMAND"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-function fdtop() {
-    echo -e "\n\e[1;36m🗂 Top Processes by Open File Descriptors\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    sudo bash -c '
-    for d in /proc/[0-9]*; do
-        pid=${d##*/}
-        [ -d "$d/fd" ] || continue
-        cnt=$(find "$d/fd" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)
-        [ "$cnt" -le 0 ] && continue
-        user=$(stat -c %U "$d" 2>/dev/null)
-        comm=$(cat "$d/comm" 2>/dev/null)
-        printf "%s|%s|%s|%s\n" "$cnt" "$pid" "$user" "$comm"
-    done
-    ' 2>/dev/null | sort -t'|' -nrk1 | head -n 15 | while IFS='|' read -r cnt pid user comm; do
-        printf "  %-7s │ %-7s │ %-8.8s │ %s\n" "$cnt" "$pid" "$user" "$comm"
-    done
-    echo -e "\n  Columns: FDs │ PID │ USER │ COMMAND"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-function psummary() {
-    local pcount tcount zcount ecount l1 l5 l15 up
-    pcount=$(ps -e --no-headers 2>/dev/null | wc -l | tr -d ' ')
-    tcount=$(ps -eLo pid --no-headers 2>/dev/null | wc -l | tr -d ' ')
-    zcount=$(ps -eo stat= 2>/dev/null | awk '/^Z/ {c++} END{print c+0}')
-    ecount=$(ss -Htan state established 2>/dev/null | wc -l | tr -d ' ')
-    read -r l1 l5 l15 _ < /proc/loadavg
-    up=$(uptime -p 2>/dev/null)
-
-    echo -e "\n\e[1;36m🧾 Process Summary\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    printf "  %-22s : %s\n" "Processes" "$pcount"
-    printf "  %-22s : %s\n" "Threads" "$tcount"
-    printf "  %-22s : %s\n" "Zombies" "$zcount"
-    printf "  %-22s : %s\n" "Established TCP" "$ecount"
-    printf "  %-22s : %s %s %s\n" "Load Avg" "$l1" "$l5" "$l15"
-    printf "  %-22s : %s\n" "Uptime" "$up"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-# ==========================================
-# 📊 BIG DASHBOARD
-# ==========================================
 
 function mm() {
-  local base used limit used_mb limit_mb free_mb used_pct
-  local anon file rss reclaimable slab_rec
+  local m used limit anon file shmem slab slabrec pgt kstack sock rss reclaimable free used_pct
   local cpu_data cpu_used cpu_limit cpu_pct cpu_thr cpu_thr_pct cpu_thr_n cpu_psi_some cpu_psi_full cpu_sample avg30
-  local disk_total disk_used disk_free
-  local cdisk_bytes cdisk_txt
-  local net_vals base_rx base_tx cur_rx cur_tx today_rx today_tx today_total
-  local home_items
-  local C_C="\e[36m" C_G="\e[90m" C_W="\e[1;37m" C_R="\e[0m"
+  local d ts visible writable total dused dfree iused ifree ipct
+  local today drx dtx drxp dtxp drxe dtxe drxd dtxd
+  local conn estab listen tw udp
+  local pids home_items uptime_sec uptime_h
+  local C_G="\e[90m" C_W="\e[1;37m" C_C="\e[36m" C_R="\e[0m"
 
-  echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Accurate)${C_R}\n${C_G}--------------------------------------------------------------------------${C_R}"
+  m="$(_mem_summary)"
+  IFS='|' read -r used limit anon file shmem slab slabrec pgt kstack sock rss reclaimable <<< "$m"
 
-  print_row() {
-    echo -e " $1  ${C_W}$(printf "%-7s" "$2")${C_R} ${C_G}::${C_R}  ${C_C}$(printf "%-18s" "$3")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-18s" "$4")${C_R} ${C_G}|${C_R}  ${C_C}$(printf "%-18s" "$5")${C_R}"
-  }
-
-  base="$(_cg_base)"
-  if [ -n "$base" ]; then
-    if [ -f "$base/memory.current" ]; then
-      used=$(_cg_read "$base/memory.current")
-      limit=$(_cg_read "$base/memory.max")
-    else
-      used=$(_cg_read "$base/memory.usage_in_bytes")
-      limit=$(_cg_read "$base/memory.limit_in_bytes")
-    fi
+  if _limit_is_real "$limit"; then
+    free=$((limit - used))
+    [ "$free" -lt 0 ] && free=0
+    used_pct="$( _pct "$used" "$limit")%"
   else
-    used=0
-    limit="max"
+    free=0
+    used_pct="shared/unlimited"
   fi
-
-  anon=$(_cg_stat anon); [ -z "$anon" ] && anon=0
-  file=$(_cg_stat file); [ -z "$file" ] && file=0
-  slab_rec=$(_cg_stat slab_reclaimable); [ -z "$slab_rec" ] && slab_rec=0
-  rss=$(ps -eo rss= 2>/dev/null | awk '{s+=$1} END {print int(s/1024) "MB"}')
-  [ -z "$rss" ] && rss="0MB"
-  reclaimable=$(((file + slab_rec) / 1024 / 1024))
-
-  used_mb=$((used / 1024 / 1024))
-  if [[ "$limit" =~ ^[0-9]+$ ]] && [ "$limit" -gt 0 ]; then
-    limit_mb=$((limit / 1024 / 1024))
-    free_mb=$(((limit - used) / 1024 / 1024))
-    [ "$free_mb" -lt 0 ] && free_mb=0
-    used_pct=$(awk -v u="$used" -v l="$limit" 'BEGIN { if (l>0) printf "%.1f%%", (u/l)*100; else print "-" }')
-    print_row "❖" "RAM" "${limit_mb}MB Max" "${used_mb}MB Used" "${free_mb}MB Free"
-  else
-    print_row "❖" "RAM" "Unknown Max" "${used_mb}MB Used" "cgroup mode"
-    used_pct="unknown"
-  fi
-
-  print_row "≣" "CACHE" "$((file / 1024 / 1024))MB File" "$((anon / 1024 / 1024))MB Anon" "${rss} RSS"
 
   cpu_data="$(_cpu_measure "${PHOENIX_MM_CPU_SAMPLE_SECONDS:-2}")"
   IFS='|' read -r cpu_used cpu_limit cpu_pct cpu_thr cpu_thr_pct cpu_thr_n cpu_psi_some cpu_psi_full cpu_sample <<< "$cpu_data"
   avg30=$(_cpu_avg_history 30 2>/dev/null || true)
-  if awk -v v="$cpu_limit" 'BEGIN { exit !(v>0) }'; then
-    print_row "⚙" "CPU" "${cpu_limit} vCPU Max" "${cpu_used} vCPU ${cpu_sample}s" "${cpu_pct}% Limit"
-  else
-    print_row "⚙" "CPU" "shared/auto" "${cpu_used} vCPU ${cpu_sample}s" "no fixed cap"
-  fi
   [ -z "$avg30" ] && avg30="$cpu_used"
-  print_row "⌁" "CPU+" "${avg30} vCPU 30s" "${cpu_thr_pct}% Throttle" "${cpu_psi_some}% PSI10"
 
-  disk_total=$(df -h / 2>/dev/null | awk 'NR==2 {print $2}')
-  disk_used=$(df -h / 2>/dev/null | awk 'NR==2 {print $3}')
-  disk_free=$(df -h / 2>/dev/null | awk 'NR==2 {print $4}')
-  [ -z "$disk_total" ] && disk_total="?"
-  [ -z "$disk_used" ] && disk_used="?"
-  [ -z "$disk_free" ] && disk_free="?"
-  print_row "⛁" "DISK" "${disk_total} Total" "${disk_used} Used" "${disk_free} Free"
+  d="$(_cdisk_read 5)"
+  IFS='|' read -r ts visible writable total dused dfree iused ifree ipct <<< "$d"
 
-  cdisk_bytes=$(_cdisk_bytes "" 900)
-  cdisk_txt="$(_b2h "$cdisk_bytes")"
-  print_row "▣" "C DISK" "${cdisk_txt}" "visible container data" "refresh: cdisk refresh"
+  today="$(_net_today_totals)"
+  IFS='|' read -r drx dtx drxp dtxp drxe dtxe drxd dtxd <<< "$today"
+  conn="$(_net_conn_counts)"
+  IFS='|' read -r estab listen tw udp <<< "$conn"
 
-  net_vals=$(_net_today_values)
-  IFS='|' read -r base_rx base_tx cur_rx cur_tx <<< "$net_vals"
-  today_rx=$((cur_rx - base_rx)); [ "$today_rx" -lt 0 ] && today_rx=0
-  today_tx=$((cur_tx - base_tx)); [ "$today_tx" -lt 0 ] && today_tx=0
-  today_total=$((today_rx + today_tx))
-  print_row "🌐" "NET" "$(_b2h "$today_rx") In Today" "$(_b2h "$today_tx") Out Today" "$(_b2h "$today_total") Total"
-
+  pids=$(ps -e --no-headers 2>/dev/null | wc -l | tr -d ' ')
   home_items=$(find "$HOME" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
-  [ -z "$home_items" ] && home_items="0"
-  print_row "🏠" "HOME" "${home_items} Items" "$USER" "$HOME"
+  uptime_sec=$(ps -o etimes= -p 1 2>/dev/null | xargs)
+  _is_int "$uptime_sec" || uptime_sec=0
+  uptime_h=$(_secs_human "$uptime_sec")
 
-  echo -e "${C_G}--------------------------------------------------------------------------${C_R}"
-  echo -e " ${C_W}RAM%${C_R}    ${C_G}::${C_R}  ${C_C}${used_pct}${C_R}"
-  echo -e " ${C_W}CACHE${C_R}   ${C_G}::${C_R}  ${C_C}${reclaimable}MB likely reclaimable${C_R}"
-  echo -e " ${C_W}CPU NOW${C_R} ${C_G}::${C_R}  ${C_C}${cpu_used} vCPU (${cpu_sample}s avg)${C_R}"
-  echo -e "${C_G}--------------------------------------------------------------------------${C_R}\n"
+  echo -e "\n${C_W}▶ SYSTEM MONITOR (Container Accurate)${C_R}"
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+  if _limit_is_real "$limit"; then
+    _print_row "❖" "RAM" "$(_b2h "$limit") Max" "$(_b2h "$used") Used" "$(_b2h "$free") Free"
+  else
+    _print_row "❖" "RAM" "shared/unlimited" "$(_b2h "$used") Used" "host-managed"
+  fi
+  _print_row "≣" "CACHE" "$(_b2h "$file") File" "$(_b2h "$anon") Anon" "$(_b2h "$rss") RSS"
+  if awk -v v="$cpu_limit" 'BEGIN { exit !(v>0) }'; then
+    _print_row "⚙" "CPU" "${cpu_limit} vCPU Max" "${cpu_used} vCPU ${cpu_sample}s" "${cpu_pct}% Limit"
+  else
+    _print_row "⚙" "CPU" "shared/auto" "${cpu_used} vCPU ${cpu_sample}s" "no fixed cap"
+  fi
+  _print_row "⌁" "CPU+" "${avg30} vCPU 30s" "${cpu_thr_pct}% Throttle" "${cpu_psi_some}% PSI10"
+  if _limit_is_real "$total"; then
+    _print_row "⛁" "C DISK" "$(_b2h "$visible") Visible" "$(_b2h "$writable") Writable" "$(_b2h "$dfree") Free"
+  else
+    _print_row "⛁" "C DISK" "$(_b2h "$visible") Visible" "$(_b2h "$writable") Writable" "host-managed free"
+  fi
+  _print_row "⇅" "NET TODAY" "$(_b2h "$drx") Down" "$(_b2h "$dtx") Up" "$((drxp + dtxp)) Pkts"
+  _print_row "☍" "CONN" "${estab} Estab" "${listen} Listen" "${udp} UDP"
+  _print_row "▣" "SYSTEM" "${pids} PIDs" "${home_items} HomeItems" "${uptime_h}"
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+  echo -e " ${C_W}RAM%${C_R}      ${C_G}::${C_R}  ${C_C}${used_pct}${C_R}"
+  echo -e " ${C_W}RECLAIM${C_R}   ${C_G}::${C_R}  ${C_C}$(_b2h "$reclaimable") likely reclaimable${C_R}"
+  echo -e " ${C_W}CPU NOW${C_R}   ${C_G}::${C_R}  ${C_C}${cpu_used} vCPU (${cpu_sample}s avg)${C_R}"
+  echo -e " ${C_W}PORTS${C_R}     ${C_G}::${C_R}  ${C_C}${listen} open/listening${C_R}"
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}\n"
 }
 
-# ==========================================
-# 🧪 FULL DIAGNOSTICS
-# ==========================================
-
-function diag() {
-    mm
-    cpuwhy 3
-    ramwhy
-    net
-    io 1
-    psummary
-}
-
-# ==========================================
-# 🔌 TAILSCALE
-# ==========================================
-
+# ------------------------------------------
+# Tailscale helpers
+# ------------------------------------------
 function cc() {
     if pgrep -x "tailscaled" > /dev/null; then
         echo -e "\e[1;33mℹ Tailscale daemon is running.\e[0m"
@@ -1241,8 +1422,8 @@ function cc() {
         sleep 3
     fi
 
-    TS_KEY_FILE="$HOME/.ts_auth_key"
-    TS_KEY=""
+    local TS_KEY_FILE="$HOME/.ts_auth_key"
+    local TS_KEY=""
 
     if [ -f "$TS_KEY_FILE" ]; then
         echo -e "\n\e[1;36m🔑 Previous Key found!\e[0m"
@@ -1258,9 +1439,7 @@ function cc() {
             return 1
         fi
     else
-        echo -e "\e[1;36m"
         read -p "Enter Tailscale Auth Key: " TS_KEY
-        echo -e "\e[0m"
         [ -n "$TS_KEY" ] && echo "$TS_KEY" > "$TS_KEY_FILE"
     fi
 
@@ -1280,113 +1459,11 @@ function cs() {
     echo -e "\e[1;32m✔ Tailscale stopped.\e[0m\n"
 }
 
-# ==========================================
-# 📚 COMMAND MENU
-# ==========================================
-
-function pcmd() {
-    printf "   \e[1;32m%-16s\e[0m : %s\n" "$1" "$2"
-}
-
-function cmds() {
-    echo -e "\n\e[1;37m⚡ ALL MAGICAL SHORTCUTS ⚡\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-
-    echo -e "\e[1;33m📁 Navigation & Files\e[0m"
-    pcmd "c" "Clear screen"
-    pcmd ".. / ..." "Go back folders"
-    pcmd "ll / la" "List files"
-    pcmd "sz" "Show size in current directory"
-    pcmd "md" "Create directory"
-    pcmd "mkcd <dir>" "Create and enter directory"
-    pcmd "tree" "Visual tree"
-    pcmd "dsize" "Sub-folder sizes"
-    pcmd "chownme" "Take ownership"
-    pcmd "chmodx" "Make file executable"
-    pcmd "ex <file>" "Extract archive"
-    pcmd "findbig" "Files larger than 50MB"
-    pcmd "findtext <txt>" "Search text in files"
-    pcmd "cspace [path]" "Biggest directories"
-
-    echo -e "\n\e[1;33m💻 System / Monitor\e[0m"
-    pcmd "mm" "Main dashboard"
-    pcmd "diag" "Full diagnostics"
-    pcmd "up" "Update & upgrade packages"
-    pcmd "clean" "Autoremove + clean + reclaimram"
-    pcmd "mem / ram" "Container RAM summary"
-    pcmd "hostmem" "Raw free -h"
-    pcmd "ramtop" "Top processes by RSS"
-    pcmd "ramwhy" "Explain RAM usage"
-    pcmd "cachefiles" "Show cache directories"
-    pcmd "reclaimram" "Remove cache files"
-    pcmd "cpu" "CPU usage (2s avg)"
-    pcmd "cpu5" "CPU usage (5s avg)"
-    pcmd "cpuwhy [s]" "Explain CPU spikes"
-    pcmd "cpuavg [s]" "Average saved CPU history"
-    pcmd "cputop" "Top CPU processes"
-    pcmd "cpulive [s]" "Live CPU view"
-    pcmd "cginfo" "Raw cgroup info"
-
-    echo -e "\n\e[1;33m💾 Disk / IO / Network\e[0m"
-    pcmd "df" "Filesystem usage"
-    pcmd "cdisk [refresh]" "Visible full container used size"
-    pcmd "cspace [path]" "Biggest directories"
-    pcmd "io [s]" "Container IO totals and rates"
-    pcmd "iotop" "Top processes by accumulated IO"
-    pcmd "fdtop" "Top processes by open files"
-    pcmd "net" "Today and boot network totals"
-    pcmd "netlive [s]" "Live network speeds"
-    pcmd "nettop" "Top remote peers"
-    pcmd "netconn" "Connection state summary"
-    pcmd "psummary" "Processes / threads / zombies"
-
-    echo -e "\n\e[1;33m🎯 App Management\e[0m"
-    pcmd "apps" "List Codex/Node/Python apps"
-    pcmd "kn" "Kill all Node apps"
-    pcmd "kp" "Kill all Python apps"
-    pcmd "kcodex" "Kill all Codex processes"
-    pcmd "kport <no>" "Kill app on a port"
-
-    echo -e "\n\e[1;33m🌐 Network & VPN\e[0m"
-    pcmd "cc" "Connect Tailscale"
-    pcmd "cs" "Disconnect Tailscale"
-    pcmd "ts" "Tailscale status"
-    pcmd "myip" "Public IP info"
-    pcmd "pinger" "Quick connectivity test"
-    pcmd "speed" "Speed test"
-    pcmd "serve" "Serve current directory on :8000"
-
-    echo -e "\n\e[1;33m🛠 Dev & Tools\e[0m"
-    pcmd "weather" "Weather in Dhaka"
-    pcmd "gs / ga / gc" "Git shortcuts"
-    pcmd "addcmd" "Create personal shortcut"
-    pcmd "delcmd" "Delete personal shortcut"
-    pcmd "mkv" "Create .venv"
-    pcmd "onv / offv" "Activate / deactivate .venv"
-    pcmd "sv" "Smart activate venv"
-    pcmd "dcodex" "Show Codex status"
-    pcmd "dpy" "Check Python/Pip/Venv"
-    pcmd "dgo" "Install Go at runtime"
-    pcmd "djava" "Install Java at runtime"
-
-    echo -e "\n\e[1;35m👤 My Personal Shortcuts\e[0m"
-    if [ -f "$CUSTOM_ALIAS_FILE" ] && [ -s "$CUSTOM_ALIAS_FILE" ]; then
-        cat "$CUSTOM_ALIAS_FILE" | sed "s/alias //g" | sed "s/='/|/g" | sed "s/'//g" | while IFS='|' read -r name cmd; do
-            pcmd "$name" "$cmd"
-        done
-    else
-        echo -e "   \e[90mNo personal shortcuts yet. Type 'addcmd' to create one.\e[0m"
-    fi
-
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-# ==========================================
-# 🎉 CLEAN LOGIN SCREEN
-# ==========================================
-
+# ------------------------------------------
+# MOTD / Login dashboard
+# ------------------------------------------
 function custom_motd() {
-    local OS_VERSION KERNEL_VERSION ARCH CPU_MODEL LAST_LOGIN_FILE LAST_LOGIN_DATA LAST_LOGIN_TIME LAST_LOGIN_IP CURRENT_IP UPTIME_SEC MY_UPTIME d h m
+    local OS_VERSION KERNEL_VERSION ARCH CPU_MODEL LAST_LOGIN_FILE LAST_LOGIN_DATA LAST_LOGIN_TIME LAST_LOGIN_IP CURRENT_IP UPTIME_SEC MY_UPTIME
     OS_VERSION=$(grep PRETTY_NAME /etc/os-release | cut -d '"' -f 2)
     KERNEL_VERSION=$(uname -r)
     ARCH=$(uname -m)
@@ -1407,20 +1484,8 @@ function custom_motd() {
     echo "$(date +"%A, %d %B %Y %I:%M:%S %p")|${CURRENT_IP:-Local}" > "$LAST_LOGIN_FILE"
 
     UPTIME_SEC=$(ps -o etimes= -p 1 2>/dev/null | xargs)
-    if [ -n "$UPTIME_SEC" ] && [[ "$UPTIME_SEC" =~ ^[0-9]+$ ]]; then
-        d=$((UPTIME_SEC / 86400))
-        h=$(((UPTIME_SEC % 86400) / 3600))
-        m=$(((UPTIME_SEC % 3600) / 60))
-        if [ $d -gt 0 ]; then
-            MY_UPTIME="${d} days, ${h} hours, ${m} mins"
-        elif [ $h -gt 0 ]; then
-            MY_UPTIME="${h} hours, ${m} mins"
-        else
-            MY_UPTIME="${m} mins"
-        fi
-    else
-        MY_UPTIME="Just started"
-    fi
+    _is_int "$UPTIME_SEC" || UPTIME_SEC=0
+    MY_UPTIME=$(_secs_human "$UPTIME_SEC")
 
     echo -e "\e[1;36m╭────────────────────────────────────────────────────────────────────────╮\e[0m"
     echo -e "\e[1;36m│ \e[1;37m🔥 Welcome to Phoenix Server 🔥\e[0m                                        "
@@ -1434,33 +1499,123 @@ function custom_motd() {
     echo -e "\e[1;36m╰────────────────────────────────────────────────────────────────────────╯\e[0m"
 }
 
+# ------------------------------------------
+# Command menu
+# ------------------------------------------
+function pcmd() {
+    printf "   \e[1;32m%-18s\e[0m : %s\n" "$1" "$2"
+}
+
+function cmds() {
+    echo -e "\n\e[1;37m⚡ ALL PHOENIX SHORTCUTS ⚡\e[0m"
+    echo -e "\e[90m────────────────────────────────────────────────────────────────────────────\e[0m"
+
+    echo -e "\e[1;33m📁 Navigation & Files\e[0m"
+    pcmd "c" "Clear screen"
+    pcmd ".. / ..." "Go back folders"
+    pcmd "ll / la" "List files"
+    pcmd "sz / dsize" "Size summary"
+    pcmd "mkcd <dir>" "Create and enter directory"
+    pcmd "tree" "Visual tree"
+    pcmd "ex <file>" "Extract archive"
+    pcmd "findbig" "Find files >50MB"
+    pcmd "findtext <txt>" "Search text in files"
+    pcmd "diskhot [path] [n]" "Largest files"
+    pcmd "cdisktop [p] [n]" "Largest directories"
+
+    echo -e "\n\e[1;33m💻 System & Health\e[0m"
+    pcmd "mm" "Main dashboard"
+    pcmd "health" "Health summary"
+    pcmd "diag" "Full diagnosis"
+    pcmd "ram / ramtop" "RAM summary / top"
+    pcmd "ramwhy" "Explain RAM usage"
+    pcmd "cachefiles" "Show cache folders"
+    pcmd "reclaimram" "Clean RAM-related caches"
+    pcmd "cpu / cpu5" "CPU usage"
+    pcmd "cputop" "Top CPU processes"
+    pcmd "cpulive [s]" "Live CPU monitor"
+    pcmd "cpuwhy [s]" "Explain CPU spikes"
+    pcmd "cpuavg [s]" "Average CPU history"
+    pcmd "cginfo" "Raw cgroup info"
+    pcmd "cdisk" "Container disk summary"
+    pcmd "inode" "Inode usage"
+    pcmd "diskclean" "Clean disk caches"
+
+    echo -e "\n\e[1;33m🌐 Network & Ports\e[0m"
+    pcmd "net / nettoday" "Tracked daily network"
+    pcmd "netlive [s]" "Live network throughput"
+    pcmd "netconn" "Connection summary"
+    pcmd "netports" "Open ports"
+    pcmd "netreset" "Reset daily net counter"
+    pcmd "myip" "Public IP details"
+    pcmd "speed" "Internet speed test"
+    pcmd "pinger" "Ping 8.8.8.8"
+    pcmd "cc / cs / ts" "Tailscale connect/stop/status"
+
+    echo -e "\n\e[1;33m🎯 Processes & Apps\e[0m"
+    pcmd "apps" "Show Codex/Node/Python apps"
+    pcmd "procfind <txt>" "Search running process"
+    pcmd "kport <port>" "Kill process on port"
+    pcmd "kn / kp / kcodex" "Kill Node / Python / Codex"
+    pcmd "ports" "Same as netports"
+
+    echo -e "\n\e[1;33m🛠️ Dev, Report & Tools\e[0m"
+    pcmd "snapshot" "Save text report"
+    pcmd "snapshotjson" "Save JSON report"
+    pcmd "weather" "Weather in Dhaka"
+    pcmd "gs ga gc gp gl" "Git shortcuts"
+    pcmd "mkv / onv / offv" "Virtualenv shortcuts"
+    pcmd "sv" "Smart activate venv"
+    pcmd "dcodex" "Codex status"
+    pcmd "dpy / dgo / djava" "Prepare Python / Go / Java"
+    pcmd "serve" "Host current folder on :8000"
+    pcmd "addcmd / delcmd" "Custom shortcuts"
+
+    echo -e "\n\e[1;35m👤 My Personal Shortcuts\e[0m"
+    if [ -f "$CUSTOM_ALIAS_FILE" ] && [ -s "$CUSTOM_ALIAS_FILE" ]; then
+        cat "$CUSTOM_ALIAS_FILE" | sed "s/alias //g" | sed "s/='/|/g" | sed "s/'//g" | while IFS='|' read -r name cmd; do
+            pcmd "$name" "$cmd"
+        done
+    else
+        echo -e "   \e[90mNo personal shortcuts yet. Type 'addcmd' to create one.\e[0m"
+    fi
+
+    echo -e "\e[90m────────────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+# ------------------------------------------
+# Clean login screen
+# ------------------------------------------
 if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
     clear
     custom_motd
     mm
     echo -e "\e[1;33m🔥 Quick Actions:\e[0m"
-    printf "   \e[1;32m%-12s\e[0m : %s\n" "cc" "Connect VPN"
-    printf "   \e[1;32m%-12s\e[0m : %s\n" "ram" "Detailed RAM info"
-    printf "   \e[1;32m%-12s\e[0m : %s\n" "cpu5" "Steady CPU view"
-    printf "   \e[1;32m%-12s\e[0m : %s\n" "net" "Network today"
-    printf "   \e[1;32m%-12s\e[0m : %s\n" "cdisk" "Container used disk"
-    printf "   \e[1;36m%-12s\e[0m : \e[1;36m%s\e[0m\n\n" "cmds" "View ALL shortcuts ⚡"
+    printf "   \e[1;32m%-12s\e[0m : %s\n" "cmds" "View all shortcuts"
+    printf "   \e[1;32m%-12s\e[0m : %s\n" "health" "System health summary"
+    printf "   \e[1;32m%-12s\e[0m : %s\n" "cdisk" "Container disk details"
+    printf "   \e[1;32m%-12s\e[0m : %s\n" "net" "Network today summary"
+    printf "   \e[1;32m%-12s\e[0m : %s\n\n" "snapshot" "Save full report"
 fi
+
 EOF
 
-RUN cat /tmp/setup.sh >> /home/devuser/.bashrc && \
-    cat /tmp/setup.sh >> /root/.bashrc && \
-    chown devuser:devuser /home/devuser/.bashrc && \
-    rm /tmp/setup.sh
+RUN cat /tmp/setup.sh >> /home/devuser/.bashrc     && cat /tmp/setup.sh >> /root/.bashrc     && mkdir -p /home/devuser/phoenix-reports /root/phoenix-reports /tmp/.phoenix_state     && chmod 1777 /tmp/.phoenix_state     && chown -R devuser:devuser /home/devuser     && rm /tmp/setup.sh
 
+# --------------------------------------------------
+# Startup script
+# --------------------------------------------------
 RUN cat > /start.sh <<'SH'
 #!/bin/bash
 set -e
+mkdir -p /tmp/.phoenix_state
+chmod 1777 /tmp/.phoenix_state || true
 /usr/sbin/sshd
 tail -f /dev/null
 SH
 
-RUN sed -i 's/\r$//' /start.sh && chmod +x /start.sh
+RUN sed -i 's/
+$//' /start.sh && chmod +x /start.sh
 
 WORKDIR /home/devuser
 EXPOSE 22
