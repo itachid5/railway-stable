@@ -22,7 +22,7 @@ ENV PHOENIX_CPU_HISTORY_FILE=/var/tmp/phoenix-state/cpu_history.log
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tzdata openssh-server sudo curl wget git nano procps net-tools iputils-ping dnsutils \
     lsof htop jq speedtest-cli unzip tree python3 python3-pip python3-venv \
-    ca-certificates gnupg iproute2 netcat-openbsd ripgrep tmux rsync psmisc ncdu less mtr-tiny \
+    ca-certificates gnupg iproute2 netcat-openbsd \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo $TZ > /etc/timezone \
     && curl -fsSL https://tailscale.com/install.sh | sh \
@@ -93,11 +93,6 @@ alias sysinfo='cat /etc/os-release'
 alias cpuinfo='lscpu'
 alias myports='ss -tuln'
 alias histg='history | grep'
-alias pst='pstree -ap'
-alias editbash='nano ~/.bashrc'
-alias editshort='nano ~/.my_shortcuts'
-alias mux='tmux attach -t main 2>/dev/null || tmux new -s main'
-alias health='diag'
 
 alias myip='echo -e "\n\e[1;36m🌐 IP Details:\e[0m"; curl -s ipinfo.io; echo'
 alias speed='echo -e "\e[1;33m⌛ Testing Speed...\e[0m"; speedtest-cli --simple'
@@ -105,6 +100,7 @@ alias ping='ping -c 4'
 alias ts='sudo tailscale status'
 
 alias pinger='ping -c 4 8.8.8.8'
+alias serve='python3 -m http.server 8000'
 
 alias gs='git status'
 alias ga='git add .'
@@ -113,6 +109,7 @@ alias gp='git push'
 alias gl='git log --oneline --graph -n 10'
 alias get='wget -c'
 alias api='curl -s'
+alias weather='curl -s wttr.in/Dhaka?0'
 
 alias mkv='python3 -m venv .venv && echo -e "\e[1;32m✔ .venv created successfully!\e[0m"'
 alias onv='source .venv/bin/activate 2>/dev/null || echo -e "\e[1;31m✘ .venv not found! Run mkv first.\e[0m"'
@@ -207,79 +204,103 @@ function _b2h() {
 }
 
 function _term_cols() {
-    local c
-    c=$(tput cols 2>/dev/null || echo "${COLUMNS:-80}")
-    [[ "$c" =~ ^[0-9]+$ ]] || c="${COLUMNS:-80}"
-    [[ "$c" =~ ^[0-9]+$ ]] || c=80
-    [ "$c" -lt 48 ] && c=48
-    echo "$c"
+  local c
+  c=$(tput cols 2>/dev/null || echo "${COLUMNS:-80}")
+  [[ "$c" =~ ^[0-9]+$ ]] || c=80
+  [ "$c" -lt 34 ] && c=34
+  echo "$c"
 }
 
 function _repeat_char() {
-    local char="${1:--}" count="${2:-10}"
-    if ! [[ "$count" =~ ^[0-9]+$ ]] || [ "$count" -le 0 ]; then
-        echo
-        return
-    fi
-    printf '%*s' "$count" '' | tr ' ' "$char"
+  local ch="${1:--}" count="${2:-10}"
+  printf '%*s' "$count" '' | tr ' ' "$ch"
 }
 
-function _rule() {
-    local cols="${1:-$(_term_cols)}"
-    echo -e "\e[90m$(_repeat_char "-" "$cols")\e[0m"
+function _plain_center() {
+  local text="$1" width="$2" len left right
+  len=${#text}
+  if [ "$len" -ge "$width" ]; then
+    printf "%s" "${text:0:$width}"
+  else
+    left=$(( (width - len) / 2 ))
+    right=$(( width - len - left ))
+    printf "%*s%s%*s" "$left" "" "$text" "$right" ""
+  fi
 }
 
-function _shorten_text() {
-    local text="$1" max="${2:-30}"
-    if [ -z "$text" ]; then
-        return
-    fi
-    if [ "${#text}" -le "$max" ]; then
-        printf "%s" "$text"
-    elif [ "$max" -le 3 ]; then
-        printf "%.*s" "$max" "$text"
-    else
-        printf "%s..." "${text:0:$((max-3))}"
-    fi
+function _rule_color() {
+  local color="${1:-38;5;240}" char="${2:--}" cols
+  cols=$(_term_cols)
+  echo -e "\e[1;${color}m$(_repeat_char "$char" "$cols")\e[0m"
 }
 
-function _print_kv() {
-    local key="$1" value="$2" cols keyw wrapw first=1 line
-    cols=$(_term_cols)
-    keyw=12
-    [ "$cols" -lt 70 ] && keyw=10
-    [ "$cols" -lt 56 ] && keyw=9
-    wrapw=$((cols - keyw - 4))
-    [ "$wrapw" -lt 20 ] && wrapw=20
-
-    while IFS= read -r line; do
-        if [ "$first" -eq 1 ]; then
-            printf " %-*s : %s\n" "$keyw" "$key" "$line"
-            first=0
-        else
-            printf " %-*s   %s\n" "$keyw" "" "$line"
-        fi
-    done < <(printf "%s\n" "$value" | fold -s -w "$wrapw")
+function _box_top() {
+  local border="${1:-38;5;45}" cols inner
+  cols=$(_term_cols)
+  inner=$((cols - 2))
+  [ "$inner" -lt 10 ] && inner=10
+  echo -e "\e[1;${border}m+$(_repeat_char "=" "$inner")+\e[0m"
 }
 
-function _mm_triplet() {
-    local label="$1" a="$2" b="$3" c="$4" cols
-    cols=$(_term_cols)
+function _box_sep() {
+  local border="${1:-38;5;45}" cols inner
+  cols=$(_term_cols)
+  inner=$((cols - 2))
+  [ "$inner" -lt 10 ] && inner=10
+  echo -e "\e[1;${border}m+$(_repeat_char "-" "$inner")+\e[0m"
+}
 
-    if [ "$cols" -ge 104 ]; then
-        printf " %-8s : %-22s | %-22s | %-22s\n" "$label" "$a" "$b" "$c"
-    elif [ "$cols" -ge 88 ]; then
-        printf " %-8s : %-18s | %-18s | %-18s\n" "$label" "$a" "$b" "$c"
-    elif [ "$cols" -ge 72 ]; then
-        printf " %-8s : %-15s | %-15s | %-15s\n" "$label" "$a" "$b" "$c"
-    elif [ "$cols" -ge 58 ]; then
-        printf " %-8s : %s\n" "$label" "$a"
-        printf " %-8s   %s | %s\n" "" "$b" "$c"
-    else
-        printf " %-8s : %s\n" "$label" "$a"
-        printf " %-8s   %s\n" "" "$b"
-        printf " %-8s   %s\n" "" "$c"
-    fi
+function _box_bottom() {
+  local border="${1:-38;5;45}" cols inner
+  cols=$(_term_cols)
+  inner=$((cols - 2))
+  [ "$inner" -lt 10 ] && inner=10
+  echo -e "\e[1;${border}m+$(_repeat_char "=" "$inner")+\e[0m"
+}
+
+function _box_title_line() {
+  local text="$1" tcolor="${2:-38;5;231}" border="${3:-38;5;45}" cols inner centered line
+  cols=$(_term_cols)
+  inner=$((cols - 4))
+  [ "$inner" -lt 10 ] && inner=10
+  while IFS= read -r line; do
+    centered=$(_plain_center "$line" "$inner")
+    printf "\e[1;%sm|\e[0m \e[1;%sm%-*s\e[0m \e[1;%sm|\e[0m\n" "$border" "$tcolor" "$inner" "$centered" "$border"
+  done < <(printf "%s\n" "$text" | fold -s -w "$inner")
+}
+
+function _box_kv_line() {
+  local label="$1" value="$2" tcolor="${3:-38;5;159}" border="${4:-38;5;45}" cols inner body line
+  cols=$(_term_cols)
+  inner=$((cols - 4))
+  [ "$inner" -lt 10 ] && inner=10
+  body=$(printf "%-11s : %s" "$label" "$value")
+  while IFS= read -r line; do
+    printf "\e[1;%sm|\e[0m \e[1;%sm%-*s\e[0m \e[1;%sm|\e[0m\n" "$border" "$tcolor" "$inner" "$line" "$border"
+  done < <(printf "%s\n" "$body" | fold -s -w "$inner")
+}
+
+function _mm_print_row() {
+  local label="$1" a="$2" b="$3" c="$4" cols
+  cols=$(_term_cols)
+
+  if [ "$cols" -ge 108 ]; then
+    printf " \e[1;38;5;226m%-8s\e[0m : \e[1;38;5;51m%-22s\e[0m \e[38;5;240m|\e[0m \e[1;38;5;159m%-22s\e[0m \e[38;5;240m|\e[0m \e[1;38;5;117m%-22s\e[0m\n" "$label" "$a" "$b" "$c"
+  elif [ "$cols" -ge 88 ]; then
+    printf " \e[1;38;5;226m%-8s\e[0m : \e[1;38;5;51m%-18s\e[0m \e[38;5;240m|\e[0m \e[1;38;5;159m%-18s\e[0m \e[38;5;240m|\e[0m \e[1;38;5;117m%-18s\e[0m\n" "$label" "$a" "$b" "$c"
+  elif [ "$cols" -ge 70 ]; then
+    printf " \e[1;38;5;226m%-8s\e[0m : \e[1;38;5;51m%-16s\e[0m \e[38;5;240m|\e[0m \e[1;38;5;159m%-16s\e[0m\n" "$label" "$a" "$b"
+    printf " %-8s   \e[1;38;5;117m%s\e[0m\n" "" "$c"
+  else
+    printf " \e[1;38;5;226m%-8s\e[0m : \e[1;38;5;51m%s\e[0m\n" "$label" "$a"
+    printf " %-8s   \e[1;38;5;159m%s\e[0m\n" "" "$b"
+    printf " %-8s   \e[1;38;5;117m%s\e[0m\n" "" "$c"
+  fi
+}
+
+function _mm_print_kv() {
+  local key="$1" value="$2"
+  printf " \e[1;38;5;226m%-8s\e[0m : \e[1;38;5;231m%s\e[0m\n" "$key" "$value"
 }
 
 function mkcd() { mkdir -p "$1" && cd "$1"; }
@@ -318,201 +339,6 @@ function ex() {
     else
         echo -e "\e[1;31m✘ '$1' is not a valid file\e[0m"
     fi
-}
-
-# ==========================================
-# 🌟 EXTRA UTILITIES
-# ==========================================
-
-function weather() {
-    local city="${*:-Dhaka}"
-    city="${city// /%20}"
-    curl -s "wttr.in/${city}?0"
-    echo
-}
-
-function serve() {
-    local port="${1:-8000}"
-    if ! [[ "$port" =~ ^[0-9]+$ ]]; then
-        echo -e "\e[1;31m✘ Usage: serve [port]\e[0m"
-        return 1
-    fi
-    echo -e "\e[1;36mServing $(pwd) on http://0.0.0.0:${port}\e[0m"
-    python3 -m http.server "$port"
-}
-
-function bigfiles() {
-    local path="${1:-.}" count="${2:-20}"
-    if [ ! -e "$path" ]; then
-        echo -e "\e[1;31m✘ Path not found: $path\e[0m"
-        return 1
-    fi
-    [[ "$count" =~ ^[0-9]+$ ]] || count=20
-    echo -e "\n\e[1;36m📦 Largest Files under ${path}\e[0m"
-    _rule
-    find "$path" -type f -printf '%s|%p\n' 2>/dev/null | sort -t'|' -nrk1 | head -n "$count" | while IFS='|' read -r size file; do
-        printf "  %-10s %s\n" "$(_b2h "${size:-0}")" "$file"
-    done
-    _rule
-    echo
-}
-
-function listen() {
-    echo -e "\n\e[1;36m🎧 Listening Ports\e[0m"
-    _rule
-    sudo ss -lntup 2>/dev/null
-    _rule
-    echo
-}
-
-function portinfo() {
-    local port="$1"
-    if [ -z "$port" ]; then
-        echo -e "\e[1;31m✘ Usage: portinfo <port>\e[0m"
-        return 1
-    fi
-    echo -e "\n\e[1;36m🔎 Port ${port} details\e[0m"
-    _rule
-    sudo lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null || sudo lsof -nP -i:"$port" 2>/dev/null || echo -e "\e[1;33mNo process found on port $port\e[0m"
-    _rule
-    echo
-}
-
-function procfind() {
-    local pat="$*"
-    if [ -z "$pat" ]; then
-        echo -e "\e[1;31m✘ Usage: procfind <name-or-pattern>\e[0m"
-        return 1
-    fi
-    echo -e "\n\e[1;36m🔎 Matching Processes: ${pat}\e[0m"
-    _rule
-    ps -eo pid,user,%cpu,%mem,etime,comm,args --sort=-%cpu 2>/dev/null | grep -i --color=auto "$pat" | grep -v grep || echo -e "\e[1;33mNo matching process found.\e[0m"
-    _rule
-    echo
-}
-
-function killname() {
-    local pat="$*"
-    if [ -z "$pat" ]; then
-        echo -e "\e[1;31m✘ Usage: killname <name-or-pattern>\e[0m"
-        return 1
-    fi
-    sudo pkill -f "$pat" && echo -e "\e[1;32m✔ Killed processes matching: ${pat}\e[0m" || echo -e "\e[1;33mℹ No running process matched: ${pat}\e[0m"
-}
-
-function iplocal() {
-    echo -e "\n\e[1;36m🧭 Local IP Addresses\e[0m"
-    _rule
-    ip -brief addr show 2>/dev/null | sed '/ lo /d'
-    _rule
-    echo
-}
-
-function dnscheck() {
-    local host="$1"
-    if [ -z "$host" ]; then
-        echo -e "\e[1;31m✘ Usage: dnscheck <domain>\e[0m"
-        return 1
-    fi
-    echo -e "\n\e[1;36m🌍 DNS Check: ${host}\e[0m"
-    _rule
-    echo -e "A Records:"
-    dig +short A "$host"
-    echo -e "\nAAAA Records:"
-    dig +short AAAA "$host"
-    echo -e "\nResolver View:"
-    getent hosts "$host" || true
-    _rule
-    echo
-}
-
-function trace() {
-    local host="${1:-8.8.8.8}"
-    if command -v mtr >/dev/null 2>&1; then
-        sudo mtr -rwzc 10 "$host"
-    else
-        command ping -c 4 "$host"
-    fi
-}
-
-function portscan() {
-    local host="$1"
-    shift
-    local ports="${*:-22 80 443 8080 3000 5000}"
-
-    if [ -z "$host" ]; then
-        echo -e "\e[1;31m✘ Usage: portscan <host> [ports...]\e[0m"
-        return 1
-    fi
-
-    echo -e "\n\e[1;36m🛰 Port Scan: ${host}\e[0m"
-    _rule
-    for port in $ports; do
-        if nc -z -w 2 "$host" "$port" >/dev/null 2>&1; then
-            printf "  %-8s : \e[1;32mOPEN\e[0m\n" "$port"
-        else
-            printf "  %-8s : \e[1;31mCLOSED\e[0m\n" "$port"
-        fi
-    done
-    _rule
-    echo
-}
-
-function httphead() {
-    if [ -z "$1" ]; then
-        echo -e "\e[1;31m✘ Usage: httphead <url>\e[0m"
-        return 1
-    fi
-    curl -k -I -L -sS "$1" | sed -n '1,20p'
-}
-
-function mkpass() {
-    local len="${1:-20}"
-    [[ "$len" =~ ^[0-9]+$ ]] || len=20
-    [ "$len" -lt 8 ] && len=8
-    LC_ALL=C tr -dc 'A-Za-z0-9!@#%^_+=-' < /dev/urandom | head -c "$len"
-    echo
-}
-
-function jsonpp() {
-    if [ -n "$1" ]; then
-        jq . "$1"
-    else
-        jq .
-    fi
-}
-
-function syncdir() {
-    if [ $# -lt 2 ]; then
-        echo -e "\e[1;31m✘ Usage: syncdir <source> <destination>\e[0m"
-        return 1
-    fi
-    rsync -avh --progress "$1" "$2"
-}
-
-function ramlive() {
-    local secs="${1:-2}"
-    [[ "$secs" =~ ^[0-9]+$ ]] || secs=2
-    echo -e "\e[1;36mLive RAM monitor. Press Ctrl+C to stop.\e[0m"
-    sleep 1
-    while true; do
-        clear
-        ram
-        ramtop
-        sleep "$secs"
-    done
-}
-
-function mmlive() {
-    local secs="${1:-2}"
-    [[ "$secs" =~ ^[0-9]+$ ]] || secs=2
-    echo -e "\e[1;36mLive dashboard. Press Ctrl+C to stop.\e[0m"
-    sleep 1
-    while true; do
-        clear
-        mm
-        sleep "$secs"
-    done
 }
 
 # ==========================================
@@ -1404,11 +1230,13 @@ function mm() {
   local disk_total disk_used disk_free
   local cdisk_bytes cdisk_txt
   local net_vals base_rx base_tx cur_rx cur_tx today_rx today_tx today_total
-  local home_items cols cpu_used_txt avg30_txt
+  local home_items
 
-  cols=$(_term_cols)
-  echo -e "\n\e[1;37m▶ SYSTEM MONITOR (Container Accurate)\e[0m"
-  _rule "$cols"
+  echo
+  _box_top "38;5;51"
+  _box_title_line "▶ SYSTEM MONITOR (Container Accurate)" "38;5;231" "38;5;51"
+  _box_bottom "38;5;51"
+  _rule_color "38;5;240" "-"
 
   base="$(_cg_base)"
   if [ -n "$base" ]; then
@@ -1437,26 +1265,24 @@ function mm() {
     free_mb=$(((limit - used) / 1024 / 1024))
     [ "$free_mb" -lt 0 ] && free_mb=0
     used_pct=$(awk -v u="$used" -v l="$limit" 'BEGIN { if (l>0) printf "%.1f%%", (u/l)*100; else print "-" }')
-    _mm_triplet "RAM" "${limit_mb}MB Max" "${used_mb}MB Used" "${free_mb}MB Free"
+    _mm_print_row "RAM" "${limit_mb}MB Max" "${used_mb}MB Used" "${free_mb}MB Free"
   else
-    _mm_triplet "RAM" "Unknown Max" "${used_mb}MB Used" "cgroup mode"
+    _mm_print_row "RAM" "Unknown Max" "${used_mb}MB Used" "cgroup mode"
     used_pct="unknown"
   fi
 
-  _mm_triplet "CACHE" "$((file / 1024 / 1024))MB File" "$((anon / 1024 / 1024))MB Anon" "${rss} RSS"
+  _mm_print_row "CACHE" "$((file / 1024 / 1024))MB File" "$((anon / 1024 / 1024))MB Anon" "${rss} RSS"
 
   cpu_data="$(_cpu_measure "${PHOENIX_MM_CPU_SAMPLE_SECONDS:-2}")"
   IFS='|' read -r cpu_used cpu_limit cpu_pct cpu_thr cpu_thr_pct cpu_thr_n cpu_psi_some cpu_psi_full cpu_sample <<< "$cpu_data"
   avg30=$(_cpu_avg_history 30 2>/dev/null || true)
-  cpu_used_txt="${cpu_used} vCPU ${cpu_sample}s"
-  avg30_txt="${avg30:-$cpu_used} vCPU 30s"
-
   if awk -v v="$cpu_limit" 'BEGIN { exit !(v>0) }'; then
-    _mm_triplet "CPU" "${cpu_limit} vCPU Max" "$cpu_used_txt" "${cpu_pct}% Limit"
+    _mm_print_row "CPU" "${cpu_limit} vCPU Max" "${cpu_used} vCPU ${cpu_sample}s" "${cpu_pct}% Limit"
   else
-    _mm_triplet "CPU" "shared/auto" "$cpu_used_txt" "no fixed cap"
+    _mm_print_row "CPU" "shared/auto" "${cpu_used} vCPU ${cpu_sample}s" "no fixed cap"
   fi
-  _mm_triplet "CPU+" "$avg30_txt" "${cpu_thr_pct}% Throttle" "${cpu_psi_some}% PSI10"
+  [ -z "$avg30" ] && avg30="$cpu_used"
+  _mm_print_row "CPU+" "${avg30} vCPU 30s" "${cpu_thr_pct}% Throttle" "${cpu_psi_some}% PSI10"
 
   disk_total=$(command df -h / 2>/dev/null | awk 'NR==2 {print $2}')
   disk_used=$(command df -h / 2>/dev/null | awk 'NR==2 {print $3}')
@@ -1464,28 +1290,28 @@ function mm() {
   [ -z "$disk_total" ] && disk_total="?"
   [ -z "$disk_used" ] && disk_used="?"
   [ -z "$disk_free" ] && disk_free="?"
-  _mm_triplet "DISK" "${disk_total} Total" "${disk_used} Used" "${disk_free} Free"
+  _mm_print_row "DISK" "${disk_total} Total" "${disk_used} Used" "${disk_free} Free"
 
   cdisk_bytes=$(_cdisk_bytes "" 900)
   cdisk_txt="$(_b2h "$cdisk_bytes")"
-  _mm_triplet "C DISK" "$cdisk_txt" "visible container data" "refresh: cdisk refresh"
+  _mm_print_row "C DISK" "${cdisk_txt}" "visible container data" "refresh: cdisk refresh"
 
   net_vals=$(_net_today_values)
   IFS='|' read -r base_rx base_tx cur_rx cur_tx <<< "$net_vals"
   today_rx=$((cur_rx - base_rx)); [ "$today_rx" -lt 0 ] && today_rx=0
   today_tx=$((cur_tx - base_tx)); [ "$today_tx" -lt 0 ] && today_tx=0
   today_total=$((today_rx + today_tx))
-  _mm_triplet "NET" "$(_b2h "$today_rx") In Today" "$(_b2h "$today_tx") Out Today" "$(_b2h "$today_total") Total"
+  _mm_print_row "NET" "$(_b2h "$today_rx") In Today" "$(_b2h "$today_tx") Out Today" "$(_b2h "$today_total") Total"
 
   home_items=$(find "$HOME" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
   [ -z "$home_items" ] && home_items="0"
-  _mm_triplet "HOME" "${home_items} Items" "$USER" "$(_shorten_text "$HOME" 26)"
+  _mm_print_row "HOME" "${home_items} Items" "$USER" "$HOME"
 
-  _rule "$cols"
-  _print_kv "RAM%" "$used_pct"
-  _print_kv "CACHE" "${reclaimable}MB likely reclaimable"
-  _print_kv "CPU NOW" "${cpu_used} vCPU (${cpu_sample}s avg)"
-  _rule "$cols"
+  _rule_color "38;5;240" "-"
+  _mm_print_kv "RAM%" "$used_pct"
+  _mm_print_kv "CACHE" "${reclaimable}MB likely reclaimable"
+  _mm_print_kv "CPU NOW" "${cpu_used} vCPU (${cpu_sample}s avg)"
+  _rule_color "38;5;240" "-"
   echo
 }
 
@@ -1559,27 +1385,12 @@ function cs() {
 # ==========================================
 
 function pcmd() {
-    local name="$1" desc="$2" cols labelw wrapw line first=1
-    cols=$(_term_cols)
-    labelw=16
-    [ "$cols" -lt 80 ] && labelw=12
-    [ "$cols" -lt 64 ] && labelw=10
-    wrapw=$((cols - labelw - 7))
-    [ "$wrapw" -lt 20 ] && wrapw=20
-
-    while IFS= read -r line; do
-        if [ "$first" -eq 1 ]; then
-            printf "   \e[1;32m%-*s\e[0m : %s\n" "$labelw" "$name" "$line"
-            first=0
-        else
-            printf "   \e[1;32m%-*s\e[0m   %s\n" "$labelw" "" "$line"
-        fi
-    done < <(printf "%s\n" "$desc" | fold -s -w "$wrapw")
+    printf "   \e[1;32m%-16s\e[0m : %s\n" "$1" "$2"
 }
 
 function cmds() {
     echo -e "\n\e[1;37m⚡ ALL MAGICAL SHORTCUTS ⚡\e[0m"
-    _rule
+    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
 
     echo -e "\e[1;33m📁 Navigation & Files\e[0m"
     pcmd "c" "Clear screen"
@@ -1590,25 +1401,19 @@ function cmds() {
     pcmd "mkcd <dir>" "Create and enter directory"
     pcmd "tree" "Visual tree"
     pcmd "dsize" "Sub-folder sizes"
-    pcmd "bigfiles [p] [n]" "Show largest files under path"
     pcmd "chownme" "Take ownership"
     pcmd "chmodx" "Make file executable"
     pcmd "ex <file>" "Extract archive"
     pcmd "findbig" "Files larger than 50MB"
     pcmd "findtext <txt>" "Search text in files"
     pcmd "cspace [path]" "Biggest directories"
-    pcmd "syncdir <src> <dst>" "Fast rsync copy/sync"
-    pcmd "ncdu" "Interactive disk usage browser"
 
     echo -e "\n\e[1;33m💻 System / Monitor\e[0m"
     pcmd "mm" "Main dashboard"
-    pcmd "mmlive [s]" "Live dashboard"
     pcmd "diag" "Full diagnostics"
-    pcmd "health" "Alias for diag"
     pcmd "up" "Update & upgrade packages"
     pcmd "clean" "Autoremove + clean + reclaimram"
     pcmd "mem / ram" "Container RAM summary"
-    pcmd "ramlive [s]" "Live RAM summary"
     pcmd "hostmem" "Raw free -h"
     pcmd "ramtop" "Top processes by RSS"
     pcmd "ramwhy" "Explain RAM usage"
@@ -1621,8 +1426,6 @@ function cmds() {
     pcmd "cputop" "Top CPU processes"
     pcmd "cpulive [s]" "Live CPU view"
     pcmd "cginfo" "Raw cgroup info"
-    pcmd "psummary" "Processes / threads / zombies"
-    pcmd "pst" "Process tree view"
 
     echo -e "\n\e[1;33m💾 Disk / IO / Network\e[0m"
     pcmd "df" "Filesystem usage"
@@ -1635,18 +1438,10 @@ function cmds() {
     pcmd "netlive [s]" "Live network speeds"
     pcmd "nettop" "Top remote peers"
     pcmd "netconn" "Connection state summary"
-    pcmd "listen" "Show listening ports"
-    pcmd "portinfo <no>" "Details of one port"
-    pcmd "portscan <h> [p]" "Quick TCP port scan"
-    pcmd "iplocal" "Local interface IP list"
-    pcmd "dnscheck <dom>" "DNS lookup summary"
-    pcmd "trace [host]" "Route/latency report"
-    pcmd "httphead <url>" "Fetch HTTP response headers"
+    pcmd "psummary" "Processes / threads / zombies"
 
     echo -e "\n\e[1;33m🎯 App Management\e[0m"
     pcmd "apps" "List Codex/Node/Python apps"
-    pcmd "procfind <txt>" "Search running processes"
-    pcmd "killname <txt>" "Kill by process pattern"
     pcmd "kn" "Kill all Node apps"
     pcmd "kp" "Kill all Python apps"
     pcmd "kcodex" "Kill all Codex processes"
@@ -1659,14 +1454,11 @@ function cmds() {
     pcmd "myip" "Public IP info"
     pcmd "pinger" "Quick connectivity test"
     pcmd "speed" "Speed test"
-    pcmd "serve [port]" "Serve current directory"
+    pcmd "serve" "Serve current directory on :8000"
 
     echo -e "\n\e[1;33m🛠 Dev & Tools\e[0m"
-    pcmd "weather [city]" "Weather lookup, default Dhaka"
+    pcmd "weather" "Weather in Dhaka"
     pcmd "gs / ga / gc" "Git shortcuts"
-    pcmd "rg <text>" "Fast recursive search (ripgrep)"
-    pcmd "jsonpp [file]" "Pretty print JSON"
-    pcmd "mkpass [len]" "Generate random password"
     pcmd "addcmd" "Create personal shortcut"
     pcmd "delcmd" "Delete personal shortcut"
     pcmd "mkv" "Create .venv"
@@ -1676,9 +1468,6 @@ function cmds() {
     pcmd "dpy" "Check Python/Pip/Venv"
     pcmd "dgo" "Install Go at runtime"
     pcmd "djava" "Install Java at runtime"
-    pcmd "mux" "Attach/create tmux session"
-    pcmd "editbash" "Edit ~/.bashrc"
-    pcmd "editshort" "Edit custom shortcuts"
 
     echo -e "\n\e[1;35m👤 My Personal Shortcuts\e[0m"
     if [ -f "$CUSTOM_ALIAS_FILE" ] && [ -s "$CUSTOM_ALIAS_FILE" ]; then
@@ -1689,20 +1478,7 @@ function cmds() {
         echo -e "   \e[90mNo personal shortcuts yet. Type 'addcmd' to create one.\e[0m"
     fi
 
-    _rule
-    echo
-}
-
-function quickhelp() {
-    echo -e "\e[1;33m🔥 Quick Actions:\e[0m"
-    pcmd "cc" "Connect VPN"
-    pcmd "mmlive" "Live system monitor"
-    pcmd "ram" "Detailed RAM info"
-    pcmd "cpu5" "Steady CPU view"
-    pcmd "listen" "Show listening ports"
-    pcmd "bigfiles" "Largest files here"
-    pcmd "cmds" "View all shortcuts"
-    echo
+    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
 }
 
 # ==========================================
@@ -1710,8 +1486,7 @@ function quickhelp() {
 # ==========================================
 
 function custom_motd() {
-    local OS_VERSION KERNEL_VERSION ARCH CPU_MODEL LAST_LOGIN_FILE LAST_LOGIN_DATA LAST_LOGIN_TIME LAST_LOGIN_IP CURRENT_IP UPTIME_SEC MY_UPTIME d h m cols
-
+    local OS_VERSION KERNEL_VERSION ARCH CPU_MODEL LAST_LOGIN_FILE LAST_LOGIN_DATA LAST_LOGIN_TIME LAST_LOGIN_IP CURRENT_IP UPTIME_SEC MY_UPTIME d h m
     OS_VERSION=$(grep PRETTY_NAME /etc/os-release | cut -d '"' -f 2)
     KERNEL_VERSION=$(uname -r)
     ARCH=$(uname -m)
@@ -1728,7 +1503,7 @@ function custom_motd() {
         LAST_LOGIN_IP="---"
     fi
 
-    CURRENT_IP=$(echo "${SSH_CONNECTION:-$SSH_CLIENT}" | awk '{print $1}')
+    CURRENT_IP=$(echo $SSH_CLIENT | awk '{print $1}')
     echo "$(date +"%A, %d %B %Y %I:%M:%S %p")|${CURRENT_IP:-Local}" > "$LAST_LOGIN_FILE"
 
     UPTIME_SEC=$(ps -o etimes= -p 1 2>/dev/null | xargs)
@@ -1747,23 +1522,29 @@ function custom_motd() {
         MY_UPTIME="Just started"
     fi
 
-    cols=$(_term_cols)
-    echo -e "\e[1;37m🔥 Welcome to Phoenix Server 🔥\e[0m"
-    _rule "$cols"
-    _print_kv "OS" "$OS_VERSION"
-    _print_kv "Kernel" "${KERNEL_VERSION} (${ARCH})"
-    _print_kv "CPU" "$CPU_MODEL"
-    _print_kv "Uptime" "$MY_UPTIME"
-    _print_kv "Last Login" "$LAST_LOGIN_TIME"
-    _print_kv "Login IP" "$LAST_LOGIN_IP"
-    _rule "$cols"
+    _box_top "38;5;45"
+    _box_title_line "🔥 Welcome to Phoenix Server 🔥" "38;5;231" "38;5;45"
+    _box_sep "38;5;45"
+    _box_kv_line "OS" "$OS_VERSION" "38;5;120" "38;5;45"
+    _box_kv_line "Kernel" "${KERNEL_VERSION} (${ARCH})" "38;5;159" "38;5;45"
+    _box_kv_line "CPU" "$CPU_MODEL" "38;5;228" "38;5;45"
+    _box_kv_line "Uptime" "$MY_UPTIME" "38;5;87" "38;5;45"
+    _box_kv_line "Last Login" "$LAST_LOGIN_TIME" "38;5;219" "38;5;45"
+    _box_kv_line "Login IP" "$LAST_LOGIN_IP" "38;5;123" "38;5;45"
+    _box_bottom "38;5;45"
 }
 
 if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
     clear
     custom_motd
     mm
-    quickhelp
+    echo -e "\e[1;33m🔥 Quick Actions:\e[0m"
+    printf "   \e[1;32m%-12s\e[0m : %s\n" "cc" "Connect VPN"
+    printf "   \e[1;32m%-12s\e[0m : %s\n" "ram" "Detailed RAM info"
+    printf "   \e[1;32m%-12s\e[0m : %s\n" "cpu5" "Steady CPU view"
+    printf "   \e[1;32m%-12s\e[0m : %s\n" "net" "Network today"
+    printf "   \e[1;32m%-12s\e[0m : %s\n" "cdisk" "Container used disk"
+    printf "   \e[1;36m%-12s\e[0m : \e[1;36m%s\e[0m\n\n" "cmds" "View ALL shortcuts ⚡"
 fi
 EOF
 
