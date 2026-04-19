@@ -243,9 +243,6 @@ function cmds() {
     pcmd "cginfo" "Show raw cgroup info"
     pcmd "diag" "Quick full diagnostics"
     pcmd "df" "Disk space usage"
-    pcmd "cdisk" "Calculate real container disk size"
-    pcmd "sysload" "Show system load avg & uptime"
-    pcmd "binfo" "Basic system & environment info"
     pcmd "top" "Task manager"
     pcmd "cpuinfo" "CPU hardware info"
     pcmd "sysinfo" "OS details"
@@ -255,38 +252,54 @@ function cmds() {
     pcmd "h" "History"
     pcmd "histg <txt>" "Search history"
 
+    echo -e "\n\e[1;33m💾 Disk & Storage\e[0m"
+    pcmd "DISK" "Full container disk usage"
+    pcmd "disklive" "Live disk I/O monitor"
+    pcmd "diskwhy" "Explain disk usage"
+    pcmd "bigfiles" "Top 20 largest files"
+    pcmd "bigdirs" "Top 20 largest directories"
+    pcmd "tmpclean" "Clean /tmp and /var/tmp"
+
+    echo -e "\n\e[1;33m🌐 Network & Traffic\e[0m"
+    pcmd "NET" "Network usage since boot"
+    pcmd "netlive" "Live network traffic monitor"
+    pcmd "netstats" "Detailed connection statistics"
+    pcmd "netports" "Active connections with process"
+    pcmd "dnslookup" "DNS lookup helper"
+    pcmd "cc" "Connect to Tailscale"
+    pcmd "cs" "Disconnect Tailscale"
+    pcmd "ts" "Tailscale status"
+    pcmd "myip" "Public IP details"
+    pcmd "pinger" "Internet connectivity test"
+    pcmd "speed" "Internet speed test"
+    pcmd "serve" "Host current folder on :8000"
+
     echo -e "\n\e[1;33m🎯 App Management\e[0m"
     pcmd "apps" "List Codex/Node/Python apps"
     pcmd "kn" "Kill all Node.js apps"
     pcmd "kp" "Kill all Python apps"
     pcmd "kcodex" "Kill all Codex processes"
     pcmd "kport <no>" "Kill app on a port"
-
-    echo -e "\n\e[1;33m🌐 Network & VPN\e[0m"
-    pcmd "cc" "Connect to Tailscale"
-    pcmd "cs" "Disconnect Tailscale"
-    pcmd "ts" "Tailscale status"
-    pcmd "myip" "Public IP details"
-    pcmd "netio" "Show Data Downloaded/Uploaded"
-    pcmd "pinger" "Internet connectivity test"
-    pcmd "speed" "Internet speed test"
-    pcmd "serve" "Host current folder on :8000"
+    pcmd "proctree" "Process tree view"
+    pcmd "openfiles" "Show open file count per process"
 
     echo -e "\n\e[1;33m🛠️ Tools & Dev\e[0m"
     pcmd "weather" "Weather in Dhaka"
     pcmd "gs, ga, gc" "Git shortcuts"
+    pcmd "gitlog" "Pretty full git log"
     pcmd "addcmd" "Create personal shortcut"
     pcmd "delcmd" "Delete personal shortcut"
     pcmd "mkv" "Create .venv"
     pcmd "onv" "Activate .venv"
     pcmd "offv" "Deactivate venv"
     pcmd "sv" "Smart activate venv"
-    pcmd "passgen" "Generate a secure random password"
-    pcmd "jsonfmt" "Format/Pretty-print a JSON file"
     pcmd "dcodex" "Show Codex status"
     pcmd "dpy" "Check Python/Pip/Venv"
     pcmd "dgo" "Install Golang at runtime"
     pcmd "djava" "Install Java 17 at runtime"
+    pcmd "syshealth" "Full system health report"
+    pcmd "uptime2" "Pretty uptime display"
+    pcmd "envlist" "Show all env variables"
 
     echo -e "\n\e[1;35m👤 My Personal Shortcuts\e[0m"
     if [ -f "$CUSTOM_ALIAS_FILE" ] && [ -s "$CUSTOM_ALIAS_FILE" ]; then
@@ -298,74 +311,6 @@ function cmds() {
     fi
 
     echo -e "\e[90m──────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-# ==========================================
-# ⚡ NEW ADDED FEATURES (C-DISK, NETIO, ETC)
-# ==========================================
-
-function cdisk() {
-    echo -e "\n\e[1;36m💽 C-DISK: Calculating Actual Container Usage...\e[0m"
-    echo -e "\e[1;33m(This may take a few seconds depending on file count)\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    # Exclude virtual filesystems to get real container size
-    local total_size=$(sudo du -shc /bin /boot /dev /etc /home /lib /lib32 /lib64 /libx32 /media /mnt /opt /root /run /sbin /srv /tmp /usr /var 2>/dev/null | grep total | awk '{print $1}')
-    local home_size=$(du -sh $HOME 2>/dev/null | awk '{print $1}')
-
-    echo -e "  \e[1;32mTotal Container Size :\e[0m ${total_size:-Unknown}"
-    echo -e "  \e[1;36mYour Home Directory  :\e[0m ${home_size:-Unknown}"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-function netio() {
-    echo -e "\n\e[1;36m🌐 Network Traffic (Since Container Started)\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    for iface in /sys/class/net/*; do
-        if [ -d "$iface" ]; then
-            local iface_name=$(basename "$iface")
-            if [ "$iface_name" != "lo" ] && [ "$iface_name" != "tailscale0" ]; then
-                local rx_bytes=$(cat "$iface/statistics/rx_bytes" 2>/dev/null || echo 0)
-                local tx_bytes=$(cat "$iface/statistics/tx_bytes" 2>/dev/null || echo 0)
-                echo -e "  \e[1;33mInterface:\e[0m $iface_name"
-                echo -e "  \e[1;32m⬇ Downloaded (Rx):\e[0m $(_b2h $rx_bytes)"
-                echo -e "  \e[1;35m⬆ Uploaded   (Tx):\e[0m $(_b2h $tx_bytes)"
-                echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-            fi
-        fi
-    done
-    echo ""
-}
-
-function sysload() {
-    echo -e "\n\e[1;36m⚖️ System Load & Uptime\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    uptime
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
-}
-
-function passgen() {
-    local len="${1:-16}"
-    echo -e "\n\e[1;32m🔑 Generated Password ($len chars):\e[0m"
-    tr -dc 'A-Za-z0-9!@#$%^&*()_+' < /dev/urandom | head -c "$len" ; echo -e "\n"
-}
-
-function jsonfmt() {
-    if [ -z "$1" ] || [ ! -f "$1" ]; then
-        echo -e "\e[1;31m✘ Usage: jsonfmt <file.json>\e[0m"
-        return 1
-    fi
-    jq . "$1" | less -R
-}
-
-function binfo() {
-    echo -e "\n\e[1;36m🖥️ Basic Environment Info\e[0m"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
-    echo -e "  \e[1;33mOS:\e[0m $(cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"')"
-    echo -e "  \e[1;33mKernel:\e[0m $(uname -r)"
-    echo -e "  \e[1;33mArchitecture:\e[0m $(uname -m)"
-    echo -e "  \e[1;33mContainer User:\e[0m $(whoami)"
-    echo -e "  \e[1;33mWorking Dir:\e[0m $(pwd)"
-    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
 }
 
 # ==========================================
@@ -520,33 +465,34 @@ _mem_mode() {
 _cg_base() {
   if [ -f /sys/fs/cgroup/memory.current ]; then
     echo "/sys/fs/cgroup"
-  elif [ -f /sys/fs/cgroup/memory/memory.usage_in_bytes ]; then
+    return
+  fi
+  if [ -f /sys/fs/cgroup/memory/memory.usage_in_bytes ]; then
     echo "/sys/fs/cgroup/memory"
-  else
-    echo ""
+    return
   fi
 }
 
 _cg_read() {
-  [ -f "$1" ] && cat "$1" 2>/dev/null || echo 0
+  local f="$1"
+  [ -f "$f" ] || { echo 0; return; }
+  local v
+  v=$(cat "$f" 2>/dev/null)
+  if [[ "$v" =~ ^[0-9]+$ ]]; then echo "$v"; else echo 0; fi
 }
 
 _cg_stat() {
-  local key="$1" base="$(_cg_base)" mode="$(_mem_mode)" alt=""
+  local key="$1" base alt
+  base="$(_cg_base)"
   [ -z "$base" ] && { echo 0; return; }
 
-  if [ "$mode" = "v2" ]; then
-    awk -v k="$key" '$1==k {print $2}' "$base/memory.stat" 2>/dev/null | head -n 1
-    return
-  fi
-
   case "$key" in
-    anon) alt="rss" ;;
-    file) alt="cache" ;;
+    anon) alt="anon" ;;
+    file) alt="file" ;;
     shmem) alt="shmem" ;;
     slab) alt="slab" ;;
     slab_reclaimable) alt="slab_reclaimable" ;;
-    pagetables) alt="pgtable" ;;
+    pagetables) alt="pgfault" ;;
     kernel_stack) alt="kernel_stack" ;;
     sock) alt="sock" ;;
     *) alt="$key" ;;
@@ -1198,11 +1144,6 @@ function mm() {
   [ -z "$disk_used" ] && disk_used="?"
   [ -z "$disk_free" ] && disk_free="?"
   print_row "⛁" "DISK" "${disk_total} Total" "${disk_used} Used" "${disk_free} Free"
-  print_row "💽" "C-DISK" "Use 'cdisk'" "to calculate" "real usage"
-
-  local rx_bytes=$(cat /sys/class/net/eth0/statistics/rx_bytes 2>/dev/null || echo 0)
-  local tx_bytes=$(cat /sys/class/net/eth0/statistics/tx_bytes 2>/dev/null || echo 0)
-  print_row "🌐" "NET IO" "$(_b2h "${rx_bytes}") Down" "$(_b2h "${tx_bytes}") Up" "Since boot"
 
   home_items=$(find "$HOME" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')
   [ -z "$home_items" ] && home_items="0"
@@ -1268,6 +1209,361 @@ function cs() {
 }
 
 # ==========================================
+# 💾 DISK TOOLS (NEW)
+# ==========================================
+
+function DISK() {
+  local C_C="\e[36m" C_G="\e[90m" C_W="\e[1;37m" C_R="\e[0m" C_Y="\e[1;33m" C_GR="\e[1;32m" C_RE="\e[1;31m"
+
+  echo -e "\n${C_W}💾 DISK USAGE (Full Container View)${C_R}"
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+
+  # Root filesystem totals
+  local fs_total fs_used fs_free fs_pct
+  fs_total=$(df -h / 2>/dev/null | awk 'NR==2 {print $2}')
+  fs_used=$(df -h / 2>/dev/null | awk 'NR==2 {print $3}')
+  fs_free=$(df -h / 2>/dev/null | awk 'NR==2 {print $4}')
+  fs_pct=$(df / 2>/dev/null | awk 'NR==2 {print $5}')
+
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "Filesystem Total" "${fs_total}"
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "Used" "${fs_used} (${fs_pct})"
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "Free" "${fs_free}"
+
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+
+  # Container actual usage (what WE have written)
+  echo -e " ${C_Y}📂 Container Directory Usage:${C_R}"
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "Home ($HOME)" "$(du -sh "$HOME" 2>/dev/null | cut -f1)"
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "/tmp" "$(du -sh /tmp 2>/dev/null | cut -f1)"
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "/var/log" "$(du -sh /var/log 2>/dev/null | cut -f1)"
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "/var/cache" "$(du -sh /var/cache 2>/dev/null | cut -f1)"
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "/root" "$(du -sh /root 2>/dev/null | cut -f1)"
+
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+
+  # All mounted filesystems
+  echo -e " ${C_Y}📊 All Mounted Filesystems:${C_R}"
+  df -h --output=source,size,used,avail,pcent,target 2>/dev/null | awk 'NR==1 {printf "  %-20s %-7s %-7s %-7s %-6s %s\n", $1,$2,$3,$4,$5,$6} NR>1 && /^\// {printf "  %-20s %-7s %-7s %-7s %-6s %s\n", $1,$2,$3,$4,$5,$6}'
+
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+
+  # Inode usage
+  local inode_used inode_total inode_pct
+  inode_used=$(df -i / 2>/dev/null | awk 'NR==2 {print $3}')
+  inode_total=$(df -i / 2>/dev/null | awk 'NR==2 {print $2}')
+  inode_pct=$(df -i / 2>/dev/null | awk 'NR==2 {print $5}')
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s / %s (%s)${C_R}\n" "Inodes Used" "${inode_used}" "${inode_total}" "${inode_pct}"
+
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+  echo -e " ${C_GR}Run: bigfiles | bigdirs | diskwhy | tmpclean${C_R}\n"
+}
+
+function diskwhy() {
+  echo -e "\n\e[1;35m🔎 Disk Usage Diagnosis\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+
+  local pct
+  pct=$(df / 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}')
+
+  if [ -n "$pct" ] && [ "$pct" -ge 90 ] 2>/dev/null; then
+    echo -e "\e[1;31m⚠ CRITICAL: Disk is ${pct}% full!\e[0m"
+    echo -e "Immediate action needed. Run \e[1;36mbigfiles\e[0m and \e[1;36mtmpclean\e[0m now."
+  elif [ -n "$pct" ] && [ "$pct" -ge 70 ] 2>/dev/null; then
+    echo -e "\e[1;33m⚠ WARNING: Disk is ${pct}% full.\e[0m"
+    echo -e "Consider cleaning up logs, cache, or unused files."
+  else
+    echo -e "\e[1;32m✔ Disk usage is healthy (${pct}% used).\e[0m"
+  fi
+
+  echo -e "\n\e[1;36mTop space consumers:\e[0m"
+  du -sh /home /root /tmp /var /usr 2>/dev/null | sort -hr | head -n 8 | while read -r s p; do
+    printf "  %-8s  %s\n" "$s" "$p"
+  done
+
+  echo -e "\n\e[1;36mLog files:\e[0m"
+  find /var/log -type f -name "*.log" -exec du -sh {} + 2>/dev/null | sort -hr | head -n 5
+
+  echo -e "\n\e[1;32mWhat to do:\e[0m"
+  echo -e "  1) Run \e[1;36mbigfiles\e[0m to find largest files"
+  echo -e "  2) Run \e[1;36mbigdirs\e[0m to find largest directories"
+  echo -e "  3) Run \e[1;36mtmpclean\e[0m to clean /tmp"
+  echo -e "  4) Run \e[1;36mreclaimram\e[0m to clean apt/pip/npm cache"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function bigfiles() {
+  echo -e "\n\e[1;36m📦 Top 20 Largest Files (container-wide)\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  find / -xdev -type f -printf '%s %p\n' 2>/dev/null | sort -rn | head -n 20 | while read -r size path; do
+    human=$(awk -v b="$size" 'BEGIN{
+      split("B KB MB GB",u," "); i=1;
+      while(b>=1024&&i<4){b/=1024;i++}
+      printf "%.1f %s", b, u[i]
+    }')
+    printf "  %-10s  %s\n" "$human" "$path"
+  done
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function bigdirs() {
+  echo -e "\n\e[1;36m📁 Top 20 Largest Directories\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  du -hx --max-depth=4 / 2>/dev/null | sort -hr | grep -v "^0" | head -n 20 | while read -r size path; do
+    printf "  %-10s  %s\n" "$size" "$path"
+  done
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function tmpclean() {
+  echo -e "\n\e[1;33m🧹 Cleaning temporary files...\e[0m"
+  local before after
+  before=$(du -sh /tmp /var/tmp 2>/dev/null | awk '{sum+=$1} END{print sum}')
+  rm -rf /tmp/* /tmp/.* /var/tmp/* 2>/dev/null || true
+  sync
+  echo -e "\e[1;32m✔ /tmp and /var/tmp cleaned.\e[0m"
+  echo -e "\n\e[1;36mCurrent disk status:\e[0m"
+  df -h / 2>/dev/null | awk 'NR<=2'
+  echo
+}
+
+function disklive() {
+  echo -e "\e[1;36mLive disk I/O monitor. Press Ctrl+C to stop.\e[0m"
+  sleep 1
+  while true; do
+    clear
+    echo -e "\e[1;37m⛁ LIVE DISK I/O  —  $(date '+%H:%M:%S')\e[0m"
+    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+    if command -v iostat >/dev/null 2>&1; then
+      iostat -xh 1 1 2>/dev/null | tail -n +3
+    else
+      cat /proc/diskstats 2>/dev/null | awk '{printf "  %-12s rd:%s wr:%s\n", $3, $6, $10}' | head -n 10
+    fi
+    echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+    DISK
+    sleep 2
+  done
+}
+
+# ==========================================
+# 🌐 NETWORK TOOLS (NEW)
+# ==========================================
+
+function NET() {
+  local C_C="\e[36m" C_G="\e[90m" C_W="\e[1;37m" C_R="\e[0m" C_Y="\e[1;33m" C_GR="\e[1;32m"
+
+  echo -e "\n${C_W}🌐 NETWORK USAGE (Since Container Boot)${C_R}"
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+
+  # Per-interface RX/TX from /proc/net/dev
+  echo -e " ${C_Y}📡 Interface Traffic:${C_R}"
+  printf "  ${C_W}%-12s %-18s %-18s %-12s %-12s${C_R}\n" "Interface" "RX (Download)" "TX (Upload)" "RX Packets" "TX Packets"
+  echo -e "  ${C_G}$(printf '%.0s─' {1..68})${C_R}"
+
+  awk 'NR>2 {
+    iface=$1; gsub(/:/, "", iface)
+    rx_bytes=$2; tx_bytes=$10
+    rx_pkts=$3; tx_pkts=$11
+    if (rx_bytes+tx_bytes > 0) {
+      split("B KB MB GB TB", u, " ")
+      # RX human
+      rx=rx_bytes; ri=1; while(rx>=1024 && ri<5){rx/=1024; ri++}
+      # TX human
+      tx=tx_bytes; ti=1; while(tx>=1024 && ti<5){tx/=1024; ti++}
+      printf "  %-12s %-18s %-18s %-12s %-12s\n", iface, sprintf("%.1f %s",rx,u[ri]), sprintf("%.1f %s",tx,u[ti]), rx_pkts, tx_pkts
+    }
+  }' /proc/net/dev 2>/dev/null
+
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+
+  # Active connections summary
+  local tcp_count udp_count listen_count
+  tcp_count=$(ss -t 2>/dev/null | grep -c ESTAB || echo 0)
+  udp_count=$(ss -u 2>/dev/null | grep -v "^Netid" | wc -l || echo 0)
+  listen_count=$(ss -tln 2>/dev/null | grep -c LISTEN || echo 0)
+
+  echo -e " ${C_Y}🔌 Connection Summary:${C_R}"
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "TCP Established" "${tcp_count}"
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "UDP Sockets" "${udp_count}"
+  printf "  ${C_W}%-22s${C_R} : ${C_C}%s${C_R}\n" "Listening Ports" "${listen_count}"
+
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+
+  # DNS info
+  echo -e " ${C_Y}🔍 DNS Resolvers:${C_R}"
+  grep "^nameserver" /etc/resolv.conf 2>/dev/null | awk '{printf "  %s\n", $2}' | head -n 3
+
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+
+  # IP addresses
+  echo -e " ${C_Y}🏠 IP Addresses:${C_R}"
+  ip -4 addr show 2>/dev/null | awk '/inet / {printf "  %-12s : %s\n", $NF, $2}' | head -n 5
+
+  echo -e "${C_G}────────────────────────────────────────────────────────────────────${C_R}"
+  echo -e " ${C_GR}Run: netlive | netstats | netports | myip${C_R}\n"
+}
+
+function netlive() {
+  echo -e "\e[1;36mLive network monitor. Press Ctrl+C to stop.\e[0m"
+  local prev_rx prev_tx cur_rx cur_tx iface
+  # Pick first non-loopback interface
+  iface=$(ip -o link show 2>/dev/null | awk -F': ' '!/lo/{print $2; exit}')
+  [ -z "$iface" ] && iface="eth0"
+
+  _get_bytes() {
+    awk -v iface="${iface}:" '$1==iface {print $2, $10}' /proc/net/dev 2>/dev/null
+  }
+
+  prev_rx=$(awk -v iface="${iface}:" '$1==iface {print $2}' /proc/net/dev 2>/dev/null)
+  prev_tx=$(awk -v iface="${iface}:" '$1==iface {print $10}' /proc/net/dev 2>/dev/null)
+
+  while true; do
+    sleep 1
+    cur_rx=$(awk -v iface="${iface}:" '$1==iface {print $2}' /proc/net/dev 2>/dev/null)
+    cur_tx=$(awk -v iface="${iface}:" '$1==iface {print $10}' /proc/net/dev 2>/dev/null)
+
+    local dl ul
+    dl=$(awk -v d="$((cur_rx - prev_rx))" 'BEGIN{
+      split("B/s KB/s MB/s GB/s",u," "); i=1; b=d;
+      if(b<0)b=0;
+      while(b>=1024&&i<4){b/=1024;i++}
+      printf "%.1f %s", b, u[i]
+    }')
+    ul=$(awk -v d="$((cur_tx - prev_tx))" 'BEGIN{
+      split("B/s KB/s MB/s GB/s",u," "); i=1; b=d;
+      if(b<0)b=0;
+      while(b>=1024&&i<4){b/=1024;i++}
+      printf "%.1f %s", b, u[i]
+    }')
+
+    printf "\r\e[1;36m[%s]\e[0m  \e[1;32m↓ DL: %-12s\e[0m  \e[1;33m↑ UL: %-12s\e[0m  iface: %s   " \
+      "$(date '+%H:%M:%S')" "$dl" "$ul" "$iface"
+
+    prev_rx="$cur_rx"
+    prev_tx="$cur_tx"
+  done
+}
+
+function netstats() {
+  echo -e "\n\e[1;36m📊 Detailed Network Statistics\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+
+  echo -e "\e[1;33mTCP States:\e[0m"
+  ss -tan 2>/dev/null | awk 'NR>1 {states[$1]++} END {for(s in states) printf "  %-18s: %d\n", s, states[s]}' | sort -k2 -rn
+
+  echo -e "\n\e[1;33mTop Remote IPs by connections:\e[0m"
+  ss -tan 2>/dev/null | awk 'NR>1 && $1=="ESTAB" {split($5,a,":"); ips[a[1]]++} END {for(i in ips) printf "  %-20s: %d connections\n", i, ips[i]}' | sort -k2 -rn | head -n 10
+
+  echo -e "\n\e[1;33mSocket Buffers:\e[0m"
+  cat /proc/net/sockstat 2>/dev/null | sed 's/^/  /'
+
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function netports() {
+  echo -e "\n\e[1;36m🔌 Active Ports & Processes\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-8s %-10s %-25s %-20s %s\n" "Proto" "Port" "Address" "State" "Process"
+  echo -e "  \e[90m$(printf '%.0s─' {1..68})\e[0m"
+  sudo ss -tulpn 2>/dev/null | awk 'NR>1 {
+    proto=$1; state=$2; addr=$5; proc=$7
+    split(addr,a,":")
+    port=a[length(a)]
+    printf "  %-8s %-10s %-25s %-20s %s\n", proto, port, addr, state, proc
+  }' | sort -k2 -n
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function dnslookup() {
+  if [ -z "$1" ]; then
+    echo -e "\e[1;31m✘ Usage: dnslookup <domain>\e[0m"
+    return 1
+  fi
+  echo -e "\n\e[1;36m🔍 DNS Lookup: $1\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  echo -e "\e[1;33mA Records:\e[0m"
+  host -t A "$1" 2>/dev/null | grep "has address" | sed 's/^/  /'
+  echo -e "\e[1;33mMX Records:\e[0m"
+  host -t MX "$1" 2>/dev/null | grep "mail" | sed 's/^/  /'
+  echo -e "\e[1;33mNS Records:\e[0m"
+  host -t NS "$1" 2>/dev/null | grep "name server" | sed 's/^/  /'
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+# ==========================================
+# 🛠️ EXTRA SYSTEM TOOLS (NEW)
+# ==========================================
+
+function proctree() {
+  echo -e "\n\e[1;36m🌳 Process Tree\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  ps -eo pid=,ppid=,user=,%cpu=,%mem=,comm= --sort=ppid | awk '
+  BEGIN { printf "  %-7s %-7s %-8s %-6s %-6s %s\n", "PID", "PPID", "USER", "CPU%", "MEM%", "COMMAND" }
+  { printf "  %-7s %-7s %-8.8s %-6s %-6s %s\n", $1,$2,$3,$4,$5,$6 }
+  ' | head -n 30
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function openfiles() {
+  echo -e "\n\e[1;36m📂 Open File Descriptors per Process\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-7s %-8s %-8s %s\n" "PID" "FD Count" "USER" "COMMAND"
+  echo -e "  \e[90m$(printf '%.0s─' {1..50})\e[0m"
+  for pid in $(ls /proc 2>/dev/null | grep -E '^[0-9]+$' | sort -n); do
+    fd_count=$(ls /proc/$pid/fd 2>/dev/null | wc -l)
+    comm=$(cat /proc/$pid/comm 2>/dev/null || echo "?")
+    user=$(stat -c '%U' /proc/$pid 2>/dev/null || echo "?")
+    if [ "$fd_count" -gt 5 ] 2>/dev/null; then
+      printf "  %-7s %-8s %-8s %s\n" "$pid" "$fd_count" "$user" "$comm"
+    fi
+  done | sort -k2 -rn | head -n 20
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function gitlog() {
+  git log --oneline --graph --decorate --all -n 20 2>/dev/null || echo -e "\e[1;31m✘ Not a git repository.\e[0m"
+}
+
+function uptime2() {
+  local secs d h m s
+  secs=$(awk '{print int($1)}' /proc/uptime 2>/dev/null)
+  d=$((secs/86400)); h=$(((secs%86400)/3600)); m=$(((secs%3600)/60)); s=$((secs%60))
+  echo -e "\n\e[1;36m⏱ System Uptime\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  printf "  %-20s : %s days, %s hours, %s mins, %s secs\n" "Host Uptime" "$d" "$h" "$m" "$s"
+  local c_secs
+  c_secs=$(ps -o etimes= -p 1 2>/dev/null | xargs)
+  if [ -n "$c_secs" ] && [[ "$c_secs" =~ ^[0-9]+$ ]]; then
+    local cd ch cm cs
+    cd=$((c_secs/86400)); ch=$(((c_secs%86400)/3600)); cm=$(((c_secs%3600)/60)); cs=$((c_secs%60))
+    printf "  %-20s : %s days, %s hours, %s mins, %s secs\n" "Container PID1 Up" "$cd" "$ch" "$cm" "$cs"
+  fi
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function envlist() {
+  echo -e "\n\e[1;36m🌍 Environment Variables\e[0m"
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m"
+  env | sort | while IFS='=' read -r key val; do
+    printf "  \e[1;32m%-28s\e[0m = %s\n" "$key" "$val"
+  done
+  echo -e "\e[90m────────────────────────────────────────────────────────────────────\e[0m\n"
+}
+
+function syshealth() {
+  echo -e "\n\e[1;37m══════════════════════════════════════════════════════\e[0m"
+  echo -e "\e[1;37m  🏥 FULL SYSTEM HEALTH REPORT\e[0m"
+  echo -e "\e[1;37m══════════════════════════════════════════════════════\e[0m"
+  uptime2
+  mm
+  DISK
+  NET
+  netstats
+  ramwhy
+  cpuwhy 2
+  echo -e "\e[1;37m══════════════════════════════════════════════════════\e[0m\n"
+}
+
+# ==========================================
 # Clean login screen
 # ==========================================
 
@@ -1279,6 +1575,8 @@ if [ -n "$SSH_CLIENT" ] || [ -n "$SSH_TTY" ]; then
     printf "   \e[1;32m%-10s\e[0m : %s\n" "cc" "Connect VPN"
     printf "   \e[1;32m%-10s\e[0m : %s\n" "ram" "Detailed RAM Info"
     printf "   \e[1;32m%-10s\e[0m : %s\n" "cpu5" "Steady CPU view"
+    printf "   \e[1;32m%-10s\e[0m : %s\n" "DISK" "Full disk usage"
+    printf "   \e[1;32m%-10s\e[0m : %s\n" "NET" "Network traffic info"
     printf "   \e[1;32m%-10s\e[0m : %s\n" "dcodex" "Show Codex status"
     printf "   \e[1;36m%-10s\e[0m : \e[1;36m%s\e[0m\n\n" "cmds" "View ALL Shortcuts ⚡"
 fi
